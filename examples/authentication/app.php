@@ -6,11 +6,8 @@ namespace Authentication;
 
 use Amp\Postgres\PostgresConfig;
 use Amp\Postgres\PostgresConnectionPool;
-use Authentication\Identity\Repository;
 use Ramsey\Uuid\Uuid;
-use Thesis\ORM\AmpPostgres\ConnectionHandle;
-use Thesis\ORM\EntityManager;
-use Thesis\ORM\Session;
+use Thesis\Norm\UnitOfWork;
 use function Amp\async;
 
 require_once __DIR__ . '/../../vendor/autoload.php';
@@ -34,32 +31,30 @@ $postgres->query(
         SQL,
 );
 
-$entityManager = new EntityManager(new ConnectionHandle($postgres));
-
-async(static function () use ($entityManager): void {
+async(static function () use ($postgres): void {
     $id = Uuid::uuid7();
     $password = bin2hex(random_bytes(16));
     $newPassword = bin2hex(random_bytes(16));
 
-    $entityManager->session(static function (Session $session) use ($id, $password): void {
-        $repository = new Repository($session);
+    // register
+    $transaction = $postgres->beginTransaction();
+    $unitOfWork = new UnitOfWork($transaction);
+    $repository = new IdentityRepository($unitOfWork);
+    $identity = Identity::register($id, $password);
+    $repository->add($identity);
+    $unitOfWork->flush();
+    $transaction->commit();
 
-        $identity = Identity::register($id, $password);
+    // change password
+    $transaction = $postgres->beginTransaction();
+    $unitOfWork = new UnitOfWork($transaction);
+    $repository = new IdentityRepository($unitOfWork);
+    $identity = $repository->find($id) ?? throw new \Exception('Not registered');
+    $identity->changePassword($password, $newPassword);
+    $unitOfWork->flush();
+    $transaction->commit();
 
-        $repository->add($identity);
-    });
+    // find all
+    dump(new IdentityRepository(new UnitOfWork($postgres))->findAll());
 
-    $entityManager->session(static function (Session $session) use ($id, $password, $newPassword): void {
-        $repository = new Repository($session);
-
-        $identity = $repository->find($id) ?? throw new \Exception('Not registered');
-
-        $identity->changePassword($password, $newPassword);
-    });
-
-    $identities = $entityManager->session(
-        static fn(Session $session) => new Repository($session)->findAll(),
-    );
-
-    dump($identities);
 })->await();

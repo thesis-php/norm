@@ -1,9 +1,9 @@
-# Thesis ORM
+# Thesis NORM: Not An Orm
 
 ## Installation
 
 ```shell
-composer require thesis/orm
+composer require thesis/norm
 ```
 
 ## Documentation

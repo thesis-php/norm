@@ -2,171 +2,201 @@
 
 declare(strict_types=1);
 
-namespace Thesis\ORM;
+namespace Thesis\Norm;
 
-use Thesis\ORM\Exception\DuplicateEntity;
-use Thesis\ORM\Exception\EntityNotManaged;
-use Thesis\ORM\Exception\RepositoryClosed;
-use Thesis\ORM\Internal\Changes;
-use Thesis\ORM\Internal\ExistingEntity;
-use Thesis\ORM\Internal\ManagedEntity;
-use Thesis\ORM\Internal\NonExistingEntity;
+use Thesis\Norm\Exception\ConcurrentModification;
+use Thesis\Norm\Exception\DuplicateEntity;
+use Thesis\Norm\Exception\EntityAlreadyExists;
+use Thesis\Norm\Exception\EntityNotManaged;
+use Thesis\Norm\Exception\UnitOfWorkClosed;
+use Thesis\Norm\Internal\ChangeSet;
+use Thesis\Norm\Internal\NewEntity;
+use Thesis\Norm\Internal\PersistedEntity;
 
 /**
  * @api
  *
- * @template-covariant TExecutor of object
+ * @template-covariant Tx of object
  * @template TEntity of object
- * @template-contravariant TCriteria
- * @template-contravariant TChangeSet of array|object
+ * @template TRow of array<mixed>
  */
-final class Repository
+abstract class Repository
 {
     /**
-     * @var array<non-empty-string, ManagedEntity<TEntity>>
+     * @var Tx
+     */
+    protected object $transaction { get => $this->unitOfWork->transaction; }
+
+    /**
+     * @param UnitOfWork<Tx> $unitOfWork
+     * @throws UnitOfWorkClosed
+     */
+    public function __construct(
+        private readonly UnitOfWork $unitOfWork,
+    ) {
+        $unitOfWork->onFlush($this->flush(...));
+    }
+
+    /**
+     * @var array<non-empty-string, NewEntity<TEntity>|PersistedEntity<TEntity, TRow>>
      */
     private array $entities = [];
 
     /**
-     * @internal
-     *
-     * @param Session<TExecutor> $session
-     * @param Persister<TExecutor, TEntity, TCriteria, TChangeSet> $persister
-     * @param \Closure(TEntity): ?non-empty-string $getId
-     * @param \Closure(TEntity, TEntity): ?TChangeSet $calculateChangeSet
+     * @param ?TRow $row
+     * @return ($row is null ? null : TEntity)
+     * @throws DuplicateEntity if the entity has already been passed to add()
+     * @throws UnitOfWorkClosed
      */
-    public function __construct(
-        private readonly Session $session,
-        private readonly Persister $persister,
-        private readonly \Closure $getId,
-        private readonly \Closure $calculateChangeSet,
-    ) {}
-
-    /**
-     * @param TCriteria $criteria
-     * @return list<TEntity>
-     */
-    public function find(mixed $criteria): array
-    {
-        return $this->doFind($this->session->transaction, $criteria);
-    }
-
-    /**
-     * @param TCriteria $criteria
-     * @return list<TEntity>
-     */
-    public function findOutsideTransaction(mixed $criteria): array
-    {
-        return $this->doFind($this->session->connection, $criteria);
-    }
-
-    /**
-     * @param TExecutor $executor
-     * @param TCriteria $criteria
-     * @return list<TEntity>
-     */
-    private function doFind(object $executor, mixed $criteria): array
+    final protected function manageOne(?array $row): ?object
     {
         $this->ensureNotClosed();
 
-        return array_map(
-            function (object $entity): object {
-                $key = $this->key($entity);
-                $managed = $this->entities[$key] ?? null;
+        if ($row === null) {
+            return null;
+        }
 
-                if ($managed instanceof ExistingEntity) {
-                    return $managed->entity;
-                }
+        $id = $this->rowId($row);
 
-                if ($managed !== null && $managed->entity !== null) {
-                    $this->entities[$key] = new ExistingEntity($managed->entity);
+        $managed = $this->entities[$id] ?? null;
 
-                    return $managed->entity;
-                }
+        if ($managed instanceof PersistedEntity) {
+            return $managed->entity;
+        }
 
-                $this->entities[$key] = new ExistingEntity($entity);
+        if ($managed instanceof NewEntity && $managed->entity !== null) {
+            throw new DuplicateEntity();
+        }
 
-                return $entity;
-            },
-            iterator_to_array(
-                $this->persister->find($executor, $criteria),
-                preserve_keys: false,
-            ),
-        );
+        $entity = $this->rowToEntity($row);
+        $this->entities[$id] = new PersistedEntity($entity, $row);
+
+        return $entity;
+    }
+
+    /**
+     * @param iterable<TRow> $rows
+     * @return list<TEntity>
+     */
+    final protected function manageAll(iterable $rows): array
+    {
+        $entities = [];
+
+        foreach ($rows as $row) {
+            $entities[] = $this->manageOne($row);
+        }
+
+        return $entities;
     }
 
     /**
      * @param TEntity $entity
      * @throws DuplicateEntity
+     * @throws UnitOfWorkClosed
      */
-    public function add(object $entity): void
+    final public function add(object $entity): void
     {
         $this->ensureNotClosed();
 
-        ($this->entities[$this->key($entity)] ??= $this->createNonExistingEntity())->add($entity);
+        $id = $this->entityId($entity);
+
+        $managed = $this->entities[$id] ?? null;
+
+        if ($managed === null) {
+            $this->entities[$id] = new NewEntity($entity);
+
+            return;
+        }
+
+        $managed->add($entity);
     }
 
     /**
      * @param TEntity $entity
      * @throws EntityNotManaged
+     * @throws UnitOfWorkClosed
      */
-    public function remove(object $entity): void
+    final public function remove(object $entity): void
     {
         $this->ensureNotClosed();
 
-        ($this->entities[$this->key($entity)] ??= $this->createNonExistingEntity())->remove($entity);
+        ($this->entities[$this->entityId($entity)] ?? throw new EntityNotManaged())->remove($entity);
     }
 
     /**
      * @param TEntity $entity
      * @return non-empty-string
      */
-    private function key(object $entity): string
-    {
-        return ($this->getId)($entity) ?? (string) spl_object_id($entity);
-    }
+    abstract protected function entityId(object $entity): string;
 
     /**
-     * @return NonExistingEntity<TEntity>
+     * @param TEntity $entity
+     * @return TRow
      */
-    private function createNonExistingEntity(): NonExistingEntity
-    {
-        /** @var NonExistingEntity<TEntity> */
-        return new NonExistingEntity();
-    }
+    abstract protected function entityToRow(object $entity): array;
 
     /**
-     * @internal
+     * @param TRow $row
+     * @return non-empty-string
      */
-    public function persist(): void
-    {
-        $this->ensureNotClosed();
+    abstract protected function rowId(array $row): string;
 
+    /**
+     * @param TRow $row
+     * @return TEntity
+     */
+    abstract protected function rowToEntity(array $row): object;
+
+    /**
+     * @param non-empty-list<TRow> $rows
+     * @throws EntityAlreadyExists if the storage rejects an entity as already existing
+     */
+    abstract protected function insert(array $rows): void;
+
+    /**
+     * @param non-empty-list<TRow> $rows
+     * @throws ConcurrentModification
+     */
+    abstract protected function update(array $rows): void;
+
+    /**
+     * @param non-empty-list<TRow> $rows
+     * @throws ConcurrentModification
+     */
+    abstract protected function delete(array $rows): void;
+
+    private function flush(): void
+    {
         try {
-            $changes = new Changes($this->calculateChangeSet);
+            $changeSet = new ChangeSet($this->entityToRow(...));
 
             foreach ($this->entities as $entity) {
-                $entity->collectChanges($changes);
+                $entity->collectChanges($changeSet);
             }
 
-            $changes->persist($this->session, $this->persister);
+            if ($changeSet->inserts !== []) {
+                $this->insert($changeSet->inserts);
+            }
+
+            if ($changeSet->updates !== []) {
+                $this->update($changeSet->updates);
+            }
+
+            if ($changeSet->deletes !== []) {
+                $this->delete($changeSet->deletes);
+            }
         } finally {
-            $this->close();
+            $this->entities = [];
         }
     }
 
-    private bool $isClosed = false;
-
+    /**
+     * @throws UnitOfWorkClosed
+     */
     private function ensureNotClosed(): void
     {
-        if ($this->isClosed) {
-            throw new RepositoryClosed();
+        if ($this->unitOfWork->isClosed) {
+            throw new UnitOfWorkClosed();
         }
-    }
-
-    private function close(): void
-    {
-        $this->entities = [];
-        $this->isClosed = true;
     }
 }

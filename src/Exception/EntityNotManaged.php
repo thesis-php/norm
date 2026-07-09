@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Thesis\ORM\Exception;
+namespace Thesis\Norm\Exception;
+
+use Thesis\Norm\Exception;
 
 /**
  * @api
  */
-final class EntityNotManaged extends \LogicException {}
+final class EntityNotManaged extends \LogicException implements Exception {}

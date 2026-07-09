@@ -1,6 +1,6 @@
 {
-    "name": "thesis/orm",
-    "description": "Thesis ORM",
+    "name": "thesis/norm",
+    "description": "Thesis NORM: Not An Orm",
     "license": "MIT",
     "type": "library",
     "authors": [
@@ -18,13 +18,11 @@
         }
     ],
     "require": {
-        "php": "^8.4",
-        "amphp/postgres": "^2.2",
-        "amphp/sql": "^2.1",
-        "thesis/sync-once": "^0.2"
+        "php": "^8.4"
     },
     "require-dev": {
         "amphp/amp": "^3.1",
+        "amphp/postgres": "^2.2",
         "ramsey/uuid": "^4.9",
         "symfony/var-dumper": "^8.0",
         "testo/assert": "^0.1.11",
@@ -33,14 +31,13 @@
     },
     "autoload": {
         "psr-4": {
-            "Thesis\\ORM\\": "src/"
+            "Thesis\\Norm\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
             "Authentication\\": "examples/authentication/",
-            "Testing\\": "examples/testing/",
-            "Thesis\\ORM\\": "tests/"
+            "Thesis\\Norm\\": "tests/"
         }
     },
     "config": {
