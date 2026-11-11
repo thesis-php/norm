@@ -57,9 +57,9 @@ final readonly class DependentTable implements Mapper, Writer, DependsOn
         $this->table->insert($transaction, $rows);
     }
 
-    public function update(object $transaction, array $rows): void
+    public function update(object $transaction, array $changes): void
     {
-        $this->table->update($transaction, $rows);
+        $this->table->update($transaction, $changes);
     }
 
     public function delete(object $transaction, array $rows): void

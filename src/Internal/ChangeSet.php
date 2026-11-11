@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Thesis\Norm\Internal;
 
+use Thesis\Norm\Change;
+
 /**
  * @internal
  *
@@ -33,7 +35,7 @@ final class ChangeSet
     }
 
     /**
-     * @var list<TRow>
+     * @var list<Change<TRow>>
      */
     public private(set) array $updates = [];
 
@@ -46,7 +48,7 @@ final class ChangeSet
         $row = ($this->entityToRow)($entity);
 
         if ($row !== $snapshot) {
-            $this->updates[] = $row;
+            $this->updates[] = new Change($snapshot, $row);
         }
     }
 

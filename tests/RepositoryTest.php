@@ -94,7 +94,28 @@ final readonly class RepositoryTest
         $article->title = 'New';
         $unitOfWork->flush();
 
-        Assert::same($storage->log, [['update', 'articles', [['title' => 'New', 'id' => 'a', 'published_at' => null]]]]);
+        Assert::same($storage->log, [['update', 'articles', [[
+            'before' => ['title' => 'Title', 'id' => 'a', 'published_at' => null],
+            'after' => ['title' => 'New', 'id' => 'a', 'published_at' => null],
+        ]]]]);
+    }
+
+    public function updateReceivesNormalizedSnapshotAsBefore(): void
+    {
+        $storage = new Storage();
+        $storage->articles['a'] = ['id' => 'a', 'title' => 'Title', 'published_at' => '2026-01-01 00:00:00+00'];
+        $unitOfWork = new UnitOfWork($storage);
+        $repository = new ArticleRepository($unitOfWork);
+
+        $article = $repository->find('a');
+        Assert::notNull($article);
+        $article->title = 'New';
+        $unitOfWork->flush();
+
+        Assert::same($storage->log, [['update', 'articles', [[
+            'before' => ['title' => 'Title', 'id' => 'a', 'published_at' => '2026-01-01 00:00:00+00:00'],
+            'after' => ['title' => 'New', 'id' => 'a', 'published_at' => '2026-01-01 00:00:00+00:00'],
+        ]]]]);
     }
 
     public function removedEntityIsDeleted(): void

@@ -26,6 +26,7 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 - **BC Break:** `Repository` is removed. Write your own repository class on top of `UnitOfWork::entities()` and add the finders you need, registering loaded rows via `EntitySet::manageOne()`/`manageAll()`.
 - **BC Break:** `UnitOfWork::repository()`, `Repository::findBy()` and `Repository::key()` are removed.
 - **BC Break:** Inserts, updates and deletes are passed to the `Writer` in batches.
+- **BC Break:** `Writer::update()` receives a list of `Change` objects with the row as loaded (`before`) and as it is now (`after`), so that optimistic locks can check the loaded version and only the changed columns can be written.
 - **BC Break:** `UnitOfWork::flush()` writes in phases: all inserts, then all updates, then all deletes (in the reverse order), instead of flushing entity sets one by one. Hierarchies with foreign keys can now be inserted and deleted in one unit of work.
 
 ### Removed

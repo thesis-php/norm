@@ -27,10 +27,10 @@ interface Writer
 
     /**
      * @param Tx $transaction
-     * @param non-empty-list<TRow> $rows
+     * @param non-empty-list<Change<TRow>> $changes only the rows that differ from their snapshots
      * @throws ConcurrentModification
      */
-    public function update(object $transaction, array $rows): void;
+    public function update(object $transaction, array $changes): void;
 
     /**
      * @param Tx $transaction

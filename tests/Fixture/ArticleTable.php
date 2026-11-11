@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Norm\Fixture;
 
+use Thesis\Norm\Change;
 use Thesis\Norm\Exception\ConcurrentModification;
 use Thesis\Norm\Exception\EntityAlreadyExists;
 use Thesis\Norm\Mapper;
@@ -58,11 +59,16 @@ final readonly class ArticleTable implements Mapper, Writer
         }
     }
 
-    public function update(object $transaction, array $rows): void
+    public function update(object $transaction, array $changes): void
     {
-        $transaction->log[] = ['update', 'articles', $rows];
+        $transaction->log[] = ['update', 'articles', array_map(
+            static fn(Change $change): array => ['before' => $change->before, 'after' => $change->after],
+            $changes,
+        )];
 
-        foreach ($rows as $row) {
+        foreach ($changes as $change) {
+            $row = $change->after;
+
             if (!isset($transaction->articles[$row['id']])) {
                 throw new ConcurrentModification();
             }

@@ -70,7 +70,7 @@ final readonly class IdentityTable implements Mapper, Writer
         }
     }
 
-    public function update(object $transaction, array $rows): void
+    public function update(object $transaction, array $changes): void
     {
         $statement = $transaction->prepare(
             <<<'SQL'
@@ -81,8 +81,12 @@ final readonly class IdentityTable implements Mapper, Writer
                 SQL,
         );
 
-        foreach ($rows as $row) {
-            $result = $statement->execute($row);
+        foreach ($changes as $change) {
+            $result = $statement->execute([
+                'id' => $change->before['id'],
+                'password_hash' => $change->after['password_hash'],
+                'version' => $change->before['version'],
+            ]);
 
             if ($result->getRowCount() !== 1) {
                 throw new ConcurrentModification();
