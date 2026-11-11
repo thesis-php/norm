@@ -5,20 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] 2026-11-12
 
 The abstract `Repository` is split into composable parts: a table converts and writes rows, an entity set tracks entities, and the repository is your own class.
 
 ### Added
 
 - Add `Mapper` and `Writer` interfaces: implement them (usually in one class, a table) to convert entities to rows and to write rows to the storage.
-- Add `UnitOfWork::entities()` returning an `EntitySet` with `add()`, `remove()`, `manageOne()` and `manageAll()`. It is called once per entity class, normally by its repository.
+- Add `UnitOfWork::entities()` returning an `EntitySet` with `add()`, `remove()`, `manageOne()` and `manageAll()`. It can be called once per entity class, normally by the repository of the class: a second call throws `Exception\EntitySetAlreadyRegistered`.
 - Add `EntitySet::find()` for finders by id: it returns an entity passed to `add()` or already loaded without querying the storage and `null` for a removed entity, otherwise it loads and registers the row. Finders by other criteria keep reflecting the storage.
 - Add optional `RowId` interface: implement it in a table to take the entity id right from a loaded row. Without it, `EntitySet::manageOne()` gets the id of a row by hydrating it.
-- Add `DependsOn` interface: implement it in a table whose rows reference other entities, so that `UnitOfWork::flush()` inserts and updates them after the referenced ones and deletes them before. A dependency cycle throws `Exception\DependencyCycle`.
-- Add `BeforeFlush` interface: implement it in a table to act on every managed entity right before `UnitOfWork::flush()` collects changes (release events into an outbox, cascade removals, touch `updatedAt`). The hook receives the entity and its `EntityState` (`New`, `Unchanged`, `Changed`, `Removed`) and may change, add, remove and load entities of any entity set. Entities cannot be changed while the changes are being written.
+- Add `DependsOn` interface: implement it in a table whose rows reference other entities, so that `UnitOfWork::flush()` inserts and updates them after the referenced ones and deletes them before. A dependency cycle throws `Exception\DependencyCycle` naming the classes of the cycle.
+- Add `BeforeFlush` interface: implement it in a table to act on every managed entity right before `UnitOfWork::flush()` collects changes (release events into an outbox, cascade removals, touch `updatedAt`). The hook receives the entity and its `EntityState` (`New`, `Unchanged`, `Changed`, `Removed`) and may change, add, remove and load entities of any entity set.
 - Add `Change` passed to `Writer::update()` with the row as loaded (`before`) and as it is now (`after`).
-- Add named constructors to `DuplicateEntity`, `EntityNotManaged`, `UnitOfWorkClosed` and `DependencyCycle`: their messages name the entity class and id, and `DependencyCycle` names the classes of the cycle.
+- Add named constructors to `DuplicateEntity`, `EntityNotManaged` and `UnitOfWorkClosed`, which are now thrown with descriptive messages: `DuplicateEntity` and `EntityNotManaged` name the entity class and id.
 - Guarantee that `UnitOfWork::flush()` without changes does not touch the executor, so a lazily begun transaction is not begun at all.
 - Add `thesis-norm-repository` AI skill (`skills/thesis-norm-repository/SKILL.md`) describing how to write tables and repositories, distributed with the package and synced by [`llm/skills`](https://github.com/roxblnfk/skills).
 
@@ -38,7 +38,7 @@ The abstract `Repository` is split into composable parts: a table converts and w
 
 ### Fixed
 
-- `EntitySet::remove()` of an entity passed to `add()` forgets it, so removing it again or removing another entity with the same id throws `EntityNotManaged` instead of being silently accepted.
+- Removing an entity passed to `add()` forgets it, so removing it again or removing another instance with the same id throws `EntityNotManaged` instead of being silently accepted, as `Repository::remove()` did.
 
 ## [0.3.0] 2026-10-29
 
@@ -85,6 +85,6 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 
 - `UnitOfWork` is now always closed.
 
-[Unreleased]: https://github.com/thesis-php/norm/compare/0.3.0...HEAD
+[0.4.0]: https://github.com/thesis-php/norm/compare/0.3.0...0.4.0
 [0.3.0]: https://github.com/thesis-php/norm/compare/0.2.0...0.3.0
 [0.2.0]: https://github.com/thesis-php/norm/compare/0.1.0...0.2.0
