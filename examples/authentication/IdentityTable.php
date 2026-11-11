@@ -20,6 +20,11 @@ use Thesis\Norm\Writer;
  */
 final readonly class IdentityTable implements Mapper, Writer
 {
+    /**
+     * @see https://www.postgresql.org/docs/current/errcodes-appendix.html
+     */
+    private const string UNIQUE_VIOLATION = '23505';
+
     public function entityId(object $entity): string
     {
         return $entity->id->toString();
@@ -56,7 +61,7 @@ final readonly class IdentityTable implements Mapper, Writer
             try {
                 $statement->execute($row);
             } catch (PostgresQueryError $error) {
-                if (str_contains(strtolower($error->getMessage()), 'duplicate key value violates unique constraint')) {
+                if (($error->getDiagnostics()['sqlstate'] ?? null) === self::UNIQUE_VIOLATION) {
                     throw new EntityAlreadyExists(previous: $error);
                 }
 

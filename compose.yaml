@@ -11,3 +11,13 @@ services:
       - ~/.composer/cache:/composer/cache
     tty: true
     init: true
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 1s
+      timeout: 5s
+      retries: 30

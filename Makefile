@@ -48,6 +48,13 @@ install-lowest: ## Install lowest possible dependencies
 	@touch vendor
 .PHONY: install-lowest
 
+# Examples
+
+example: var vendor ## Run the authentication example against Postgres
+	$(DOCKER_COMPOSE) up --detach --wait postgres
+	$(DOCKER_COMPOSE) run --rm --env POSTGRES_HOST=postgres php php examples/authentication/app.php
+.PHONY: example
+
 # Quality tools
 
 fixer: var ## Fix code style

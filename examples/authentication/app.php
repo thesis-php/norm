@@ -7,6 +7,7 @@ namespace Authentication;
 use Amp\Postgres\PostgresConfig;
 use Amp\Postgres\PostgresConnectionPool;
 use Ramsey\Uuid\Uuid;
+use Thesis\Norm\Exception\EntityAlreadyExists;
 use Thesis\Norm\UnitOfWork;
 use function Amp\async;
 
@@ -14,7 +15,7 @@ require_once __DIR__ . '/../../vendor/autoload.php';
 
 $postgres = new PostgresConnectionPool(
     new PostgresConfig(
-        host: 'localhost',
+        host: \is_string($host = getenv('POSTGRES_HOST')) ? $host : 'localhost',
         user: 'postgres',
         password: 'postgres',
         database: 'postgres',
@@ -41,6 +42,17 @@ async(static function () use ($postgres): void {
     $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($id, $password): void {
         new IdentityRepository($unitOfWork)->add(Identity::register($id, $password));
     });
+
+    // register twice
+    try {
+        $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($id, $password): void {
+            new IdentityRepository($unitOfWork)->add(Identity::register($id, $password));
+        });
+
+        throw new \LogicException('Expected EntityAlreadyExists');
+    } catch (EntityAlreadyExists) {
+        // a unique violation is reported by the writer, the transaction is rolled back
+    }
 
     // change password
     $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($id, $password, $newPassword): void {
