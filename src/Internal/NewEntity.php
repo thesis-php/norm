@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Norm\Internal;
 
+use Thesis\Norm\EntityState;
 use Thesis\Norm\Exception\DuplicateEntity;
 use Thesis\Norm\Exception\EntityNotManaged;
 
@@ -53,6 +54,14 @@ final class NewEntity
         }
 
         $this->entity = null;
+    }
+
+    /**
+     * @param TEntity $entity
+     */
+    public function state(object $entity): ?EntityState
+    {
+        return $entity === $this->entity ? EntityState::New : null;
     }
 
     /**

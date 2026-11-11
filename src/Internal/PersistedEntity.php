@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Thesis\Norm\Internal;
 
+use Thesis\Norm\EntityState;
 use Thesis\Norm\Exception\DuplicateEntity;
 use Thesis\Norm\Exception\EntityNotManaged;
 
@@ -52,6 +53,23 @@ final class PersistedEntity
         }
 
         $this->removed = true;
+    }
+
+    /**
+     * @param TEntity $entity
+     * @param \Closure(TEntity): TRow $entityToRow
+     */
+    public function state(object $entity, \Closure $entityToRow): ?EntityState
+    {
+        if ($entity !== $this->entity) {
+            return null;
+        }
+
+        if ($this->removed) {
+            return EntityState::Removed;
+        }
+
+        return $entityToRow($entity) === $this->snapshot ? EntityState::Unchanged : EntityState::Changed;
     }
 
     /**

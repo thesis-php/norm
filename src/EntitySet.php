@@ -129,6 +129,41 @@ final class EntitySet
     /**
      * @internal
      *
+     * @return list<TEntity> entities that will be inserted, updated (if changed) or deleted on flush
+     */
+    public function all(): array
+    {
+        $entities = [];
+
+        foreach ($this->entities as $managed) {
+            if ($managed->entity !== null) {
+                $entities[] = $managed->entity;
+            }
+        }
+
+        return $entities;
+    }
+
+    /**
+     * @internal
+     *
+     * @param TEntity $entity
+     * @return ?EntityState null if the entity is not managed
+     */
+    public function state(object $entity): ?EntityState
+    {
+        $managed = $this->entities[$this->mapper->entityId($entity)] ?? null;
+
+        if ($managed instanceof PersistedEntity) {
+            return $managed->state($entity, $this->mapper->entityToRow(...));
+        }
+
+        return $managed?->state($entity);
+    }
+
+    /**
+     * @internal
+     *
      * @return ChangeSet<TEntity, array<mixed>>
      */
     public function changes(): ChangeSet

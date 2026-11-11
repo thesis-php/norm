@@ -53,6 +53,7 @@ final class UnitOfWork
      *
      * If the table implements {@see DependsOn}, its rows are inserted and updated after the rows
      * of the entity classes it depends on and deleted before them.
+     * If the table implements {@see BeforeFlush}, its hook is called for the managed entities on flush.
      *
      * @template TEntity of object
      * @template TRow of array<mixed>
@@ -80,17 +81,20 @@ final class UnitOfWork
             entities: $entitySet,
             writer: $table,
             dependencies: $table instanceof DependsOn ? $table->dependsOn() : [],
+            beforeFlush: $table instanceof BeforeFlush ? $table : null,
         ));
 
         return $entitySet;
     }
 
     /**
-     * Writes the changes of every entity set in three phases: all inserts, then all updates, then all deletes.
-     * Inserts and updates go in the dependency order of the entity sets (see {@see DependsOn}),
-     * deletes in the reverse one. Independent entity sets keep the order they were created in.
+     * Calls the {@see BeforeFlush} hooks, then writes the changes of every entity set in three phases:
+     * all inserts, then all updates, then all deletes. Inserts and updates go in the dependency order
+     * of the entity sets (see {@see DependsOn}), deletes in the reverse one. Independent entity sets keep
+     * the order they were created in.
      *
-     * The unit of work is closed afterwards, whether the flush succeeded or not.
+     * The unit of work is closed once the changes are collected, so the entities cannot be changed while
+     * they are being written. It stays closed afterwards, whether the flush succeeded or not.
      *
      * @throws DependencyCycle if the entity sets depend on each other in a cycle
      * @throws UnitOfWorkClosed
@@ -101,11 +105,13 @@ final class UnitOfWork
 
         try {
             $transaction = $this->transaction;
+            $this->callBeforeFlushHooks();
             // Changes of all entity sets are collected before anything is written.
             $changes = array_map(
                 static fn(Table $table): array => [$table->writer, $table->entities->changes()],
                 $this->tables->inDependencyOrder(),
             );
+            $this->close();
 
             foreach ($changes as [$writer, $changeSet]) {
                 if ($changeSet->inserts !== []) {
@@ -138,6 +144,32 @@ final class UnitOfWork
     {
         $this->tables->close();
         $this->isClosed = true;
+    }
+
+    /**
+     * @throws DependencyCycle
+     */
+    private function callBeforeFlushHooks(): void
+    {
+        // Entities are listed upfront, so that the ones managed by the hooks do not get the hook.
+        $calls = [];
+
+        foreach ($this->tables->inDependencyOrder() as $table) {
+            if ($table->beforeFlush !== null) {
+                foreach ($table->entities->all() as $entity) {
+                    $calls[] = [$table->entities, $table->beforeFlush, $entity];
+                }
+            }
+        }
+
+        foreach ($calls as [$entities, $beforeFlush, $entity]) {
+            // The state is taken right before the call to reflect what the previous hooks did.
+            $state = $entities->state($entity);
+
+            if ($state !== null) {
+                $beforeFlush->beforeFlush($entity, $state);
+            }
+        }
     }
 
     /**
