@@ -6,6 +6,7 @@ namespace Thesis\Norm;
 
 use Testo\Assert;
 use Testo\Assert\ExpectException;
+use Testo\Expect;
 use Testo\Test;
 use Thesis\Norm\Exception\DuplicateEntity;
 use Thesis\Norm\Exception\EntityAlreadyExists;
@@ -233,35 +234,39 @@ final readonly class RepositoryTest
         Assert::same($storage->log, []);
     }
 
-    #[ExpectException(DuplicateEntity::class)]
     public function addingAnotherEntityWithSameIdThrows(): void
     {
+        Expect::exception(DuplicateEntity::class)->withMessage('Another instance of Thesis\Norm\Fixture\Article with id "a" is already managed by the unit of work.');
+
         $repository = new ArticleRepository(new UnitOfWork(new Storage()));
 
         $repository->add(new Article('a', 'Title'));
         $repository->add(new Article('a', 'Title'));
     }
 
-    #[ExpectException(DuplicateEntity::class)]
     public function addingEntityThatExistsInStorageThrows(): void
     {
+        Expect::exception(DuplicateEntity::class)->withMessage('Another instance of Thesis\Norm\Fixture\Article with id "a" is already managed by the unit of work.');
+
         $repository = new ArticleRepository(new UnitOfWork(self::storageWithArticle()));
 
         $repository->find('a');
         $repository->add(new Article('a', 'Title'));
     }
 
-    #[ExpectException(EntityNotManaged::class)]
     public function removingUnmanagedEntityThrows(): void
     {
+        Expect::exception(EntityNotManaged::class)->withMessage('The given instance of Thesis\Norm\Fixture\Article with id "a" is not managed by the unit of work.');
+
         $repository = new ArticleRepository(new UnitOfWork(new Storage()));
 
         $repository->remove(new Article('a', 'Title'));
     }
 
-    #[ExpectException(EntityNotManaged::class)]
     public function removingAnotherEntityWithSameIdAfterAddAndRemoveThrows(): void
     {
+        Expect::exception(EntityNotManaged::class)->withMessage('The given instance of Thesis\Norm\Fixture\Article with id "a" is not managed by the unit of work.');
+
         $repository = new ArticleRepository(new UnitOfWork(new Storage()));
         $article = new Article('a', 'Title');
         $repository->add($article);
@@ -333,9 +338,10 @@ final readonly class RepositoryTest
         $unitOfWork->flush();
     }
 
-    #[ExpectException(UnitOfWorkClosed::class)]
     public function repositoryCannotBeUsedAfterFlush(): void
     {
+        Expect::exception(UnitOfWorkClosed::class)->withMessage('The unit of work has been flushed or closed and cannot be used anymore.');
+
         $unitOfWork = new UnitOfWork(new Storage());
         $repository = new ArticleRepository($unitOfWork);
         $unitOfWork->flush();

@@ -78,7 +78,7 @@ final class UnitOfWork
 
         // Rows coming from the storage are untyped: they are trusted to match the table's row type.
         /** @var Mapper<TEntity, array<mixed>>&Writer<Tx, array<mixed>> $table */
-        $entitySet = new EntitySet($table); // @phpstan-ignore varTag.type
+        $entitySet = new EntitySet($class, $table); // @phpstan-ignore varTag.type
         $this->tables->add(new Table(
             class: $class,
             entities: $entitySet,
@@ -181,7 +181,7 @@ final class UnitOfWork
     private function ensureNotClosed(): void
     {
         if ($this->isClosed) {
-            throw new UnitOfWorkClosed();
+            throw UnitOfWorkClosed::create();
         }
     }
 }

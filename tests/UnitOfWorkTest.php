@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Norm;
 
 use Testo\Assert;
-use Testo\Assert\ExpectException;
+use Testo\Expect;
 use Testo\Test;
 use Thesis\Norm\Exception\DependencyCycle;
 use Thesis\Norm\Fixture\Article;
@@ -117,9 +117,10 @@ final readonly class UnitOfWorkTest
         Assert::same(array_keys($storage->comments), ['c']);
     }
 
-    #[ExpectException(DependencyCycle::class)]
     public function dependencyCycleThrows(): void
     {
+        Expect::exception(DependencyCycle::class)->withMessage('Entity sets depend on each other in a cycle: Thesis\Norm\Fixture\Article -> Thesis\Norm\Fixture\Comment -> Thesis\Norm\Fixture\Article.');
+
         $unitOfWork = new UnitOfWork(new Storage());
         $unitOfWork->entities(Article::class, new DependentTable(new ArticleTable(), [Comment::class]));
         $unitOfWork->entities(Comment::class, new DependentTable(new CommentTable(), [Article::class]));

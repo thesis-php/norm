@@ -31,9 +31,11 @@ final class EntitySet
     /**
      * @internal
      *
+     * @param class-string<TEntity> $class
      * @param Mapper<TEntity, array<mixed>> $mapper
      */
     public function __construct(
+        private readonly string $class,
         private readonly Mapper $mapper,
     ) {}
 
@@ -100,7 +102,7 @@ final class EntitySet
         }
 
         if ($managed !== null) {
-            throw new DuplicateEntity();
+            throw DuplicateEntity::create($this->class, $id);
         }
 
         $entity ??= $this->mapper->rowToEntity($row);
@@ -147,7 +149,13 @@ final class EntitySet
             return;
         }
 
-        $managed->add($entity);
+        if ($managed->entity !== $entity) {
+            throw DuplicateEntity::create($this->class, $id);
+        }
+
+        if ($managed instanceof PersistedEntity) {
+            $managed->isRemoved = false;
+        }
     }
 
     /**
@@ -163,10 +171,15 @@ final class EntitySet
         $this->ensureNotClosed();
 
         $id = $this->mapper->entityId($entity);
-        $managed = $this->entities[$id] ?? throw new EntityNotManaged();
-        $managed->remove($entity);
+        $managed = $this->entities[$id] ?? null;
 
-        if ($managed instanceof NewEntity) {
+        if ($managed === null || $managed->entity !== $entity) {
+            throw EntityNotManaged::create($this->class, $id);
+        }
+
+        if ($managed instanceof PersistedEntity) {
+            $managed->isRemoved = true;
+        } else {
             unset($this->entities[$id]);
         }
     }
@@ -235,7 +248,7 @@ final class EntitySet
     private function ensureNotClosed(): void
     {
         if ($this->isClosed) {
-            throw new UnitOfWorkClosed();
+            throw UnitOfWorkClosed::create();
         }
     }
 }

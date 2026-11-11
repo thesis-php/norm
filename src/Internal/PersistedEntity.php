@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace Thesis\Norm\Internal;
 
 use Thesis\Norm\EntityState;
-use Thesis\Norm\Exception\DuplicateEntity;
-use Thesis\Norm\Exception\EntityNotManaged;
 
 /**
  * An entity that is known to exist in the storage.
@@ -18,7 +16,7 @@ use Thesis\Norm\Exception\EntityNotManaged;
  */
 final class PersistedEntity
 {
-    public private(set) bool $isRemoved = false;
+    public bool $isRemoved = false;
 
     /**
      * @param TEntity $entity
@@ -28,32 +26,6 @@ final class PersistedEntity
         public readonly object $entity,
         private readonly array $snapshot,
     ) {}
-
-    /**
-     * @param TEntity $entity
-     * @throws DuplicateEntity
-     */
-    public function add(object $entity): void
-    {
-        if ($entity !== $this->entity) {
-            throw new DuplicateEntity();
-        }
-
-        $this->isRemoved = false;
-    }
-
-    /**
-     * @param TEntity $entity
-     * @throws EntityNotManaged
-     */
-    public function remove(object $entity): void
-    {
-        if ($entity !== $this->entity) {
-            throw new EntityNotManaged();
-        }
-
-        $this->isRemoved = true;
-    }
 
     /**
      * @param TEntity $entity
