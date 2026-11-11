@@ -84,11 +84,8 @@ test: var vendor up ## Run the test suite
 	$(RUN) vendor/bin/testo $(ARGS)
 .PHONY: test
 
-# Coverage is collected by a separate Testo run: when the container runs as a non-root user,
-# the initial Testo run started by Infection itself is killed (exit code 143).
 infect: var vendor ## Run mutation testing
-	$(RUN) env XDEBUG_MODE=coverage vendor/bin/testo run --coverage --coverage-xml=var/infection/coverage-xml --log-junit=var/infection/junit.xml
-	$(RUN) vendor/bin/infection --coverage=var/infection --skip-initial-tests --show-mutations $(ARGS)
+	$(RUN) env XDEBUG_MODE=coverage vendor/bin/infection --show-mutations $(ARGS)
 .PHONY: infect
 
 deps-analyze: vendor ## Check for unused/missing dependencies
