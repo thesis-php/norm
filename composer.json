@@ -24,6 +24,7 @@
         "amphp/amp": "^3.1",
         "amphp/postgres": "^2.2",
         "infection/infection": "^0.35.10",
+        "llm/skills": "^1.16",
         "ramsey/uuid": "^4.9",
         "symfony/var-dumper": "^8.0",
         "testo/assert": "^0.1.11",
@@ -44,7 +45,8 @@
     },
     "config": {
         "allow-plugins": {
-            "infection/extension-installer": true
+            "infection/extension-installer": true,
+            "llm/skills": true
         },
         "lock": false,
         "sort-packages": true

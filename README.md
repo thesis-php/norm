@@ -20,6 +20,12 @@ and the code that writes rows. NORM decides **what** to write and **when**.
 composer require thesis/norm
 ```
 
+### AI skill
+
+The package ships the [`norm-repository`](skills/norm-repository/SKILL.md) skill that teaches coding agents
+to write tables and repositories. With [`llm/skills`](https://github.com/roxblnfk/skills) installed in your project
+it is synced automatically.
+
 ## Quick start
 
 An entity is a plain object:

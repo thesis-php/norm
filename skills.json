@@ -1,0 +1,10 @@
+{
+    "$schema": "https://raw.githubusercontent.com/roxblnfk/skills/master/resources/skills.schema.json",
+    "target": ".claude/skills",
+    "sources": [
+        {
+            "from": "dir",
+            "path": "."
+        }
+    ]
+}

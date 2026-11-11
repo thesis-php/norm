@@ -11,7 +11,7 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 
 ### Added
 
-- Add `norm-repository` AI skill (`skills/norm-repository/SKILL.md`) describing how to write tables and repositories, distributed with the package.
+- Add `norm-repository` AI skill (`skills/norm-repository/SKILL.md`) describing how to write tables and repositories, distributed with the package and synced by [`llm/skills`](https://github.com/roxblnfk/skills).
 - Add `Thesis\Norm\Exception` marker interface implemented by every exception of the package.
 - Add `Mapper` and `Writer` interfaces: implement them (usually in one class) to convert entities to rows and to write rows to the storage.
 - Add optional `RowId` interface: implement it in a table to take the entity id right from a loaded row. Without it, `EntitySet::manageOne()` gets the id of a row by hydrating it.
