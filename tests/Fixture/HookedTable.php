@@ -10,7 +10,7 @@ use Thesis\Norm\Mapper;
 use Thesis\Norm\Writer;
 
 /**
- * Adds a {@see BeforeFlush} hook and a callback run before every insert to a table.
+ * Adds a {@see BeforeFlush} hook and callbacks run before every insert and every hydration to a table.
  *
  * @template TEntity of object
  * @template TRow of array<mixed>
@@ -24,11 +24,13 @@ final readonly class HookedTable implements Mapper, Writer, BeforeFlush
      * @param Mapper<TEntity, TRow>&Writer<Storage, TRow> $table
      * @param \Closure(TEntity, EntityState): void $beforeFlush
      * @param ?\Closure(): void $beforeInsert
+     * @param ?\Closure(): void $beforeRowToEntity
      */
     public function __construct(
         private Mapper&Writer $table,
         private \Closure $beforeFlush,
         private ?\Closure $beforeInsert = null,
+        private ?\Closure $beforeRowToEntity = null,
     ) {}
 
     public function beforeFlush(object $entity, EntityState $state): void
@@ -48,6 +50,10 @@ final readonly class HookedTable implements Mapper, Writer, BeforeFlush
 
     public function rowToEntity(array $row): object
     {
+        if ($this->beforeRowToEntity !== null) {
+            ($this->beforeRowToEntity)();
+        }
+
         return $this->table->rowToEntity($row);
     }
 

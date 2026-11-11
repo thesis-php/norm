@@ -165,6 +165,22 @@ final readonly class UnitOfWorkTest
         $unitOfWork->flush();
     }
 
+    public function dependencyCycleIsFollowedThroughPendingDependenciesOnly(): void
+    {
+        Expect::exception(DependencyCycle::class)->withMessage(\sprintf(
+            'Entity sets depend on each other in a cycle: %s -> %s -> %s.',
+            Article::class,
+            Comment::class,
+            Article::class,
+        ));
+
+        $unitOfWork = new UnitOfWork(new Storage());
+        $unitOfWork->entities(Article::class, new DependentTable(new ArticleTable(), [Tag::class, Article::class, Comment::class]));
+        $unitOfWork->entities(Comment::class, new DependentTable(new CommentTable(), [Article::class]));
+
+        $unitOfWork->flush();
+    }
+
     public function entitiesReturnsSameSetForSameClass(): void
     {
         $unitOfWork = new UnitOfWork(new Storage());

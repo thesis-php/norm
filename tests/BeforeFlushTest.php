@@ -142,6 +142,32 @@ final readonly class BeforeFlushTest
         Assert::same($storage->comments, []);
     }
 
+    public function newEntityRemovedByEarlierHookDoesNotGetHook(): void
+    {
+        $storage = new Storage();
+        $unitOfWork = new UnitOfWork($storage);
+        $calls = [];
+        $articles = null;
+        $b = new Article('b', 'Title');
+        $articles = $unitOfWork->entities(Article::class, new HookedTable(
+            new ArticleTable(),
+            static function (Article $article, EntityState $state) use (&$calls, &$articles, $b): void {
+                $calls[] = [$article->id, $state];
+
+                if ($article !== $b) {
+                    $articles?->remove($b);
+                }
+            },
+        ));
+
+        $articles->add(new Article('a', 'Title'));
+        $articles->add($b);
+        $unitOfWork->flush();
+
+        Assert::same($calls, [['a', EntityState::New]]);
+        Assert::same(array_keys($storage->articles), ['a']);
+    }
+
     public function nothingIsWrittenWhenHookThrows(): void
     {
         $storage = new Storage();

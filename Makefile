@@ -6,6 +6,9 @@ export DOCKER_USER ?= $(shell id -u):$(shell id -g)
 
 RUN ?= $(if $(IN_CONTAINER),,$(DOCKER_COMPOSE) run --rm php)
 COMPOSER ?= $(RUN) composer
+# Installs without the global plugins of the image: its global infection/extension-installer would shadow
+# the project one and register the project's Infection extensions (testo/bridge-infection) in the wrong place.
+COMPOSER_INSTALL ?= $(RUN) env COMPOSER_HOME=/tmp/composer COMPOSER_CACHE_DIR=/composer/cache composer
 
 # Container
 
@@ -30,20 +33,20 @@ down: ## Stop services
 
 i: install
 install: ## (i) Install dependencies
-	$(COMPOSER) install
+	$(COMPOSER_INSTALL) install
 	@rm -f vendor/.lowest
 	@touch vendor
 .PHONY: i install
 
 u: update
 update: ## (u) Update dependencies
-	$(COMPOSER) update
+	$(COMPOSER_INSTALL) update
 	@rm -f vendor/.lowest
 	@touch vendor
 .PHONY: u update
 
 install-lowest: ## Install lowest possible dependencies
-	$(COMPOSER) update --prefer-lowest --prefer-stable
+	$(COMPOSER_INSTALL) update --prefer-lowest --prefer-stable
 	@touch vendor/.lowest
 	@touch vendor
 .PHONY: install-lowest
@@ -81,8 +84,11 @@ test: var vendor up ## Run the test suite
 	$(RUN) vendor/bin/testo $(ARGS)
 .PHONY: test
 
-infect: var vendor up ## Run mutation testing
-	$(RUN) infection --show-mutations $(ARGS)
+# Coverage is collected by a separate Testo run: when the container runs as a non-root user,
+# the initial Testo run started by Infection itself is killed (exit code 143).
+infect: var vendor ## Run mutation testing
+	$(RUN) env XDEBUG_MODE=coverage vendor/bin/testo run --coverage --coverage-xml=var/infection/coverage-xml --log-junit=var/infection/junit.xml
+	$(RUN) vendor/bin/infection --coverage=var/infection --skip-initial-tests --show-mutations $(ARGS)
 .PHONY: infect
 
 deps-analyze: vendor ## Check for unused/missing dependencies
@@ -106,7 +112,7 @@ composer-normalize-check: ## Check composer.json is normalized
 fix: fixer rector composer-normalize ## Fix code style and normalize composer.json
 .PHONY: fix
 
-check: fixer-check rector-check composer-validate composer-normalize-check deps-analyze phpstan test ## Run all checks
+check: fixer-check rector-check composer-validate composer-normalize-check deps-analyze phpstan test infect ## Run all checks
 .PHONY: check
 
 rescaffold:

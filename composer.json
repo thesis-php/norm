@@ -23,9 +23,11 @@
     "require-dev": {
         "amphp/amp": "^3.1",
         "amphp/postgres": "^2.2",
+        "infection/infection": "^0.35.10",
         "ramsey/uuid": "^4.9",
         "symfony/var-dumper": "^8.0",
         "testo/assert": "^0.1.11",
+        "testo/bridge-infection": "^0.1.9",
         "testo/test": "^0.1.6",
         "testo/testo": "^0.10.29"
     },
@@ -41,6 +43,9 @@
         }
     },
     "config": {
+        "allow-plugins": {
+            "infection/extension-installer": true
+        },
         "lock": false,
         "sort-packages": true
     }

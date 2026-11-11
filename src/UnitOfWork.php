@@ -104,10 +104,10 @@ final class UnitOfWork
      */
     public function flush(): void
     {
-        $this->ensureNotClosed();
+        // Throws UnitOfWorkClosed if the unit of work is closed.
+        $executor = $this->executor;
 
         try {
-            $executor = $this->executor;
             $this->callBeforeFlushHooks();
             // Changes of all entity sets are collected before anything is written.
             $changes = array_map(

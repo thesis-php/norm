@@ -17,6 +17,7 @@ use Thesis\Norm\Fixture\ArticleRepository;
 use Thesis\Norm\Fixture\ArticleTable;
 use Thesis\Norm\Fixture\Comment;
 use Thesis\Norm\Fixture\CommentTable;
+use Thesis\Norm\Fixture\HookedTable;
 use Thesis\Norm\Fixture\Storage;
 
 #[Test]
@@ -122,6 +123,34 @@ final readonly class RepositoryTest
         $comment = $comments->manageOne(['id' => 'c', 'article_id' => 'a', 'text' => 'Text']);
 
         Assert::same($comments->manageOne(['id' => 'c', 'article_id' => 'a', 'text' => 'Text']), $comment);
+    }
+
+    public function rowIsHydratedOnceWithoutRowId(): void
+    {
+        $hydrations = 0;
+        $comments = new UnitOfWork(new Storage())->entities(Comment::class, new HookedTable(
+            new CommentTable(),
+            static function (): void {},
+            beforeRowToEntity: static function () use (&$hydrations): void {
+                ++$hydrations;
+            },
+        ));
+
+        $comments->manageOne(['id' => 'c', 'article_id' => 'a', 'text' => 'Text']);
+
+        Assert::same($hydrations, 1);
+    }
+
+    public function manageAllReturnsEntitiesOfAllRows(): void
+    {
+        $articles = new UnitOfWork(new Storage())->entities(Article::class, new ArticleTable());
+        $article = $articles->manageOne(self::ARTICLE);
+
+        $entities = $articles->manageAll([self::ARTICLE, ['id' => 'b', 'title' => 'B', 'published_at' => null]]);
+
+        Assert::same(\count($entities), 2);
+        Assert::same($entities[0] ?? null, $article);
+        Assert::same(($entities[1] ?? null)?->id, 'b');
     }
 
     public function findReturnsNullForMissingRow(): void
@@ -328,6 +357,42 @@ final readonly class RepositoryTest
         Assert::same($found->title, 'Title');
     }
 
+    public function removingAnotherInstanceOfAddedEntityThrows(): void
+    {
+        Expect::exception(EntityNotManaged::class);
+
+        $repository = new ArticleRepository(new UnitOfWork(new Storage()));
+        $repository->add(new Article('a', 'Title'));
+
+        $repository->remove(new Article('a', 'Title'));
+    }
+
+    public function removingAnotherInstanceOfLoadedEntityThrows(): void
+    {
+        Expect::exception(EntityNotManaged::class);
+
+        $repository = new ArticleRepository(new UnitOfWork(self::storageWithArticle()));
+        $repository->find('a');
+
+        $repository->remove(new Article('a', 'Title'));
+    }
+
+    public function addedEntityIsKeptAfterRemovingAnotherInstance(): void
+    {
+        $storage = new Storage();
+        $unitOfWork = new UnitOfWork($storage);
+        $repository = new ArticleRepository($unitOfWork);
+        $repository->add(new Article('a', 'Title'));
+
+        try {
+            $repository->remove(new Article('a', 'Title'));
+        } catch (EntityNotManaged) {
+        }
+        $unitOfWork->flush();
+
+        Assert::same(array_keys($storage->articles), ['a']);
+    }
+
     #[ExpectException(EntityAlreadyExists::class)]
     public function storageErrorIsPropagated(): void
     {
@@ -357,6 +422,52 @@ final readonly class RepositoryTest
         $unitOfWork->close();
 
         $repository->add(new Article('a', 'Title'));
+    }
+
+    public function closedEntitySetDoesNotLoad(): void
+    {
+        Expect::exception(UnitOfWorkClosed::class);
+
+        $unitOfWork = new UnitOfWork(new Storage());
+        $articles = $unitOfWork->entities(Article::class, new ArticleTable());
+        $unitOfWork->close();
+
+        $articles->find('a', static fn(): never => throw new \LogicException('Must not load'));
+    }
+
+    public function closedEntitySetDoesNotManageRows(): void
+    {
+        Expect::exception(UnitOfWorkClosed::class);
+
+        $unitOfWork = new UnitOfWork(new Storage());
+        $articles = $unitOfWork->entities(Article::class, new ArticleTable());
+        $unitOfWork->close();
+
+        $articles->manageOne(self::ARTICLE);
+    }
+
+    public function closedEntitySetDoesNotManageMissingRows(): void
+    {
+        Expect::exception(UnitOfWorkClosed::class);
+
+        $unitOfWork = new UnitOfWork(new Storage());
+        $articles = $unitOfWork->entities(Article::class, new ArticleTable());
+        $unitOfWork->close();
+
+        $articles->manageOne(null);
+    }
+
+    public function closedEntitySetDoesNotRemove(): void
+    {
+        Expect::exception(UnitOfWorkClosed::class);
+
+        $unitOfWork = new UnitOfWork(new Storage());
+        $articles = $unitOfWork->entities(Article::class, new ArticleTable());
+        $article = new Article('a', 'Title');
+        $articles->add($article);
+        $unitOfWork->close();
+
+        $articles->remove($article);
     }
 
     #[ExpectException(UnitOfWorkClosed::class)]

@@ -1,4 +1,6 @@
 {
+    "$schema": "vendor/infection/infection/resources/schema.json",
+    "testFramework": "testo",
     "source": {
         "directories": [
             "src"
@@ -11,7 +13,8 @@
         },
     },
     "tmpDir": "var",
-    "minCoveredMsi": 99,
+    "minMsi": 100,
+    "minCoveredMsi": 100,
     "mutators": {
         "@default": true,
     },
