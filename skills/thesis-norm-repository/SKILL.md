@@ -152,6 +152,9 @@ final readonly class ArticleRepository
 }
 ```
 
+- **One repository per entity class** is the only caller of `entities()` for it: a second call in a unit of work
+  throws `EntitySetAlreadyRegistered`. Other repositories and tables needing the entities get this repository
+  injected (scoped with the unit of work), they never call `entities()` for a foreign class.
 - **Every loaded row goes through the entity set**: `find()` by id (sees pending adds and removals, skips the query
   for managed entities), `manageOne()`/`manageAll()` by other criteria (reflect the storage). Never return
   `rowToEntity()` results directly.
@@ -213,11 +216,31 @@ public function lock(UuidInterface $id): ?Article
 - `DependsOn::dependsOn(): non-empty-list<class-string>` — entity classes referenced by foreign keys: inserts and
   updates go after them, deletes before. Not implemented without dependencies.
 - `BeforeFlush::beforeFlush(object $entity, EntityState $state)` — for every managed entity before changes are
-  collected: outbox (`releaseEvents()` into another entity set), cascades, `updatedAt` on `Changed`.
+  collected: outbox, cascades, `updatedAt` on `Changed`. Other entity sets are reached through their repositories
+  injected into the table, e.g. outbox:
+
+```php
+final readonly class OrderTable implements Mapper, Writer, BeforeFlush
+{
+    public function __construct(
+        private OutboxRepository $outbox,
+    ) {}
+
+    public function beforeFlush(object $entity, EntityState $state): void
+    {
+        foreach ($entity->releaseEvents() as $event) {
+            $this->outbox->add(OutboxMessage::fromEvent($event));
+        }
+    }
+}
+
+// OrderRepository::__construct(UnitOfWork $unitOfWork, OutboxRepository $outbox)
+$this->orders = $unitOfWork->entities(Order::class, new OrderTable($outbox));
+```
 
 ## 7. Lifecycle
 
-One unit of work per business transaction, scoped together with its repositories:
+One unit of work per business transaction, scoped together with its repositories (one instance of each):
 
 ```php
 $transaction = $postgres->beginTransaction();
@@ -246,7 +269,7 @@ try {
 - A unit of work that writes needs a transaction: `flush()` is atomic only within one.
 - Not reusable after `flush()` or `close()`, never shared between fibers.
 - Retry the whole transaction on `EntityAlreadyExists` and `ConcurrentModification`; `DuplicateEntity`,
-  `EntityNotManaged`, `UnitOfWorkClosed`, `DependencyCycle` are bugs.
+  `EntityNotManaged`, `UnitOfWorkClosed`, `DependencyCycle`, `EntitySetAlreadyRegistered` are bugs.
 
 ## 8. Tests
 

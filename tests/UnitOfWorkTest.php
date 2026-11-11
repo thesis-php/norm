@@ -8,13 +8,13 @@ use Testo\Assert;
 use Testo\Expect;
 use Testo\Test;
 use Thesis\Norm\Exception\DependencyCycle;
+use Thesis\Norm\Exception\EntitySetAlreadyRegistered;
 use Thesis\Norm\Exception\UnitOfWorkClosed;
 use Thesis\Norm\Fixture\Article;
 use Thesis\Norm\Fixture\ArticleTable;
 use Thesis\Norm\Fixture\Comment;
 use Thesis\Norm\Fixture\CommentTable;
 use Thesis\Norm\Fixture\DependentTable;
-use Thesis\Norm\Fixture\HookedTable;
 use Thesis\Norm\Fixture\Storage;
 use Thesis\Norm\Fixture\Tag;
 use Thesis\Norm\Fixture\TagTable;
@@ -181,31 +181,17 @@ final readonly class UnitOfWorkTest
         $unitOfWork->flush();
     }
 
-    public function entitiesReturnsSameSetForSameClass(): void
+    public function entitiesThrowsForAlreadyRegisteredClass(): void
     {
         $unitOfWork = new UnitOfWork(new Storage());
-
-        Assert::same(
-            $unitOfWork->entities(Article::class, new ArticleTable()),
-            $unitOfWork->entities(Article::class, new ArticleTable()),
-        );
-    }
-
-    public function tableOfFirstRegistrationIsUsed(): void
-    {
-        $storage = new Storage();
-        $unitOfWork = new UnitOfWork($storage);
         $unitOfWork->entities(Article::class, new ArticleTable());
-        $articles = $unitOfWork->entities(Article::class, new HookedTable(
-            new ArticleTable(),
-            static fn(): never => throw new \LogicException('Must not be called'),
-            static fn(): never => throw new \LogicException('Must not be called'),
+
+        Expect::exception(EntitySetAlreadyRegistered::class)->withMessage(\sprintf(
+            'Entity set of %s is already registered in the unit of work.',
+            Article::class,
         ));
 
-        $articles->add(new Article('a', 'Title'));
-        $unitOfWork->flush();
-
-        Assert::same(array_keys($storage->articles), ['a']);
+        $unitOfWork->entities(Article::class, new ArticleTable());
     }
 
     public function closeIsIdempotent(): void

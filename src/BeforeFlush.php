@@ -12,8 +12,9 @@ namespace Thesis\Norm;
  * {@see UnitOfWork::flush()} first takes the list of entities managed by all entity sets, then calls the hooks
  * of their tables in the dependency order of the entity sets (see {@see DependsOn}), passing the state
  * each entity has at the moment of the call. A hook may change, add, remove and load entities of any
- * entity set: the changes are flushed, but entities that were not managed when the flush started
- * do not get the hook. Changes are collected only after all hooks have run.
+ * entity set, reached through the repositories injected into the table: the changes are flushed,
+ * but entities that were not managed when the flush started do not get the hook.
+ * Changes are collected only after all hooks have run.
  *
  * @api
  *

@@ -194,14 +194,16 @@ Wrap this lifecycle in a helper once — see [`Transactor`](examples/authenticat
   atomic only within one, see [Guarantees](#guarantees). A connection or a pool fits a unit of work that only reads.
   To keep transactions short, pass a lazily begun one, see [Locking](#locking).
   It is available as `$unitOfWork->executor` and is passed to every `Writer` call.
-- `entities(class-string $class, Mapper&Writer $table): EntitySet` — the entity set of the class. Every call with
-  the same class returns the same set, so all repositories of one unit of work share one identity map per class.
-  The table of the first call wins.
+- `entities(class-string $class, Mapper&Writer $table): EntitySet` — registers the entity set of the class with its
+  table. Once per class: a second call throws `EntitySetAlreadyRegistered`. The entity set has one owner, the
+  repository of the class, and everyone else who needs it (another repository, a `BeforeFlush` hook) gets
+  that repository injected, see `BeforeFlush` in [Optional table interfaces](#optional-table-interfaces).
 - `flush()` — writes all changes once, see [Guarantees](#guarantees).
 - `close()` — abandons the unit of work without writing anything.
 
 A unit of work is not safe for concurrent use: create one per scope (a request, a message, a command)
-and do not share it between fibers.
+and do not share it between fibers. Create its repositories in the same scope, one instance of each: a second
+instance registers the entity set again and throws `EntitySetAlreadyRegistered`.
 
 ### `EntitySet<TEntity>`
 
@@ -245,6 +247,40 @@ Throw `ConcurrentModification` when an update or a delete affects no row.
   entity before changes are collected, with its state: `New`, `Unchanged`, `Changed` or `Removed`. Use it to release
   domain events into an outbox, cascade removals or touch `updatedAt`. A hook may change, add, remove and load
   entities of any entity set; entities that were not managed when the flush started do not get the hook.
+  The hook reaches other entity sets through their repositories, injected into the table:
+
+  ```php
+  final readonly class OrderTable implements Mapper, Writer, BeforeFlush
+  {
+      public function __construct(
+          private OutboxRepository $outbox,
+      ) {}
+
+      public function beforeFlush(object $entity, EntityState $state): void
+      {
+          foreach ($entity->releaseEvents() as $event) {
+              $this->outbox->add(OutboxMessage::fromEvent($event));
+          }
+      }
+
+      // rowToEntity(), entityToRow(), insert(), update(), delete() ...
+  }
+
+  final readonly class OrderRepository
+  {
+      /** @var EntitySet<Order> */
+      private EntitySet $orders;
+
+      public function __construct(UnitOfWork $unitOfWork, OutboxRepository $outbox)
+      {
+          $this->orders = $unitOfWork->entities(Order::class, new OrderTable($outbox));
+      }
+  }
+  ```
+
+  Every repository whose table releases events gets the same `OutboxRepository` of the unit of work, e.g. as a
+  service scoped together with it. Creating an `OutboxRepository` in each of them throws
+  `EntitySetAlreadyRegistered` on the second one.
 
 ## Guarantees
 
@@ -404,11 +440,12 @@ A `findAll()` through an entity set is an anti-pattern.
 
 Every exception implements `Thesis\Norm\Exception`.
 
-| Exception                | Thrown by                            | Meaning                                            | Retry?                     |
-|--------------------------|--------------------------------------|----------------------------------------------------|----------------------------|
-| `EntityAlreadyExists`    | your `Writer::insert()`              | a concurrent transaction inserted the same entity  | yes, the whole transaction |
-| `ConcurrentModification` | your `Writer::update()` / `delete()` | the row was changed or deleted concurrently        | yes, the whole transaction |
-| `DuplicateEntity`        | `EntitySet`                          | another object with the same id is already managed | no, a bug                  |
-| `EntityNotManaged`       | `EntitySet::remove()`                | the object is not managed by the unit of work      | no, a bug                  |
-| `UnitOfWorkClosed`       | `UnitOfWork`, `EntitySet`            | the unit of work is used after flush or close      | no, a bug                  |
-| `DependencyCycle`        | `UnitOfWork::flush()`                | `DependsOn` declarations form a cycle              | no, a bug                  |
+| Exception                    | Thrown by                            | Meaning                                            | Retry?                     |
+|------------------------------|--------------------------------------|----------------------------------------------------|----------------------------|
+| `EntityAlreadyExists`        | your `Writer::insert()`              | a concurrent transaction inserted the same entity  | yes, the whole transaction |
+| `ConcurrentModification`     | your `Writer::update()` / `delete()` | the row was changed or deleted concurrently        | yes, the whole transaction |
+| `DuplicateEntity`            | `EntitySet`                          | another object with the same id is already managed | no, a bug                  |
+| `EntityNotManaged`           | `EntitySet::remove()`                | the object is not managed by the unit of work      | no, a bug                  |
+| `UnitOfWorkClosed`           | `UnitOfWork`, `EntitySet`            | the unit of work is used after flush or close      | no, a bug                  |
+| `DependencyCycle`            | `UnitOfWork::flush()`                | `DependsOn` declarations form a cycle              | no, a bug                  |
+| `EntitySetAlreadyRegistered` | `UnitOfWork::entities()`             | the entity set of the class is already registered  | no, a bug                  |

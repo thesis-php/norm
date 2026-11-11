@@ -7,6 +7,7 @@ namespace Thesis\Norm;
 use Thesis\Norm\Exception\ConcurrentModification;
 use Thesis\Norm\Exception\DependencyCycle;
 use Thesis\Norm\Exception\EntityAlreadyExists;
+use Thesis\Norm\Exception\EntitySetAlreadyRegistered;
 use Thesis\Norm\Exception\UnitOfWorkClosed;
 use Thesis\Norm\Internal\Table;
 use Thesis\Norm\Internal\Tables;
@@ -16,7 +17,7 @@ use Thesis\Norm\Internal\Tables;
  * and flush() writes their changes out once. A unit of work cannot be reused afterwards.
  *
  * A unit of work is not safe for concurrent use: create one per scope (a request, a message, a command)
- * together with the repositories that use it and do not share it between fibers.
+ * together with the repositories that use it, one instance of each, and do not share it between fibers.
  *
  * @api
  *
@@ -53,8 +54,9 @@ final class UnitOfWork
     private readonly Tables $tables;
 
     /**
-     * Returns the entity set for the given entity class, creating it on the first call.
-     * Subsequent calls with the same class return the same set: the table of the first call is used.
+     * Registers the entity set of the given entity class with its table. It can be done once per class:
+     * the entity set has a single owner, normally the repository of the class, and other repositories and tables
+     * (e.g. a BeforeFlush hook releasing events into an outbox) get it through that repository.
      *
      * If the table implements {@see DependsOn}, its rows are inserted and updated after the rows
      * of the entity classes it depends on and deleted before them.
@@ -65,17 +67,15 @@ final class UnitOfWork
      * @param class-string<TEntity> $class
      * @param Mapper<TEntity, TRow>&Writer<TExecutor, TRow> $table
      * @return EntitySet<TEntity>
+     * @throws EntitySetAlreadyRegistered if the entity set of the class is already registered
      * @throws UnitOfWorkClosed
      */
     public function entities(string $class, Mapper&Writer $table): EntitySet
     {
         $this->ensureNotClosed();
 
-        $registered = $this->tables->get($class);
-
-        if ($registered !== null) {
-            /** @var EntitySet<TEntity> */
-            return $registered->entities;
+        if ($this->tables->has($class)) {
+            throw EntitySetAlreadyRegistered::create($class);
         }
 
         // Rows coming from the storage are untyped: they are trusted to match the table's row type.

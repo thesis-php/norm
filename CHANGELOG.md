@@ -12,7 +12,7 @@ The abstract `Repository` is split into composable parts: a table converts and w
 ### Added
 
 - Add `Mapper` and `Writer` interfaces: implement them (usually in one class, a table) to convert entities to rows and to write rows to the storage.
-- Add `UnitOfWork::entities()` returning an `EntitySet` with `add()`, `remove()`, `manageOne()` and `manageAll()`. Repositories of one unit of work share the entity set of the same entity class.
+- Add `UnitOfWork::entities()` returning an `EntitySet` with `add()`, `remove()`, `manageOne()` and `manageAll()`. It is called once per entity class, normally by its repository.
 - Add `EntitySet::find()` for finders by id: it returns an entity passed to `add()` or already loaded without querying the storage and `null` for a removed entity, otherwise it loads and registers the row. Finders by other criteria keep reflecting the storage.
 - Add optional `RowId` interface: implement it in a table to take the entity id right from a loaded row. Without it, `EntitySet::manageOne()` gets the id of a row by hydrating it.
 - Add `DependsOn` interface: implement it in a table whose rows reference other entities, so that `UnitOfWork::flush()` inserts and updates them after the referenced ones and deletes them before. A dependency cycle throws `Exception\DependencyCycle`.

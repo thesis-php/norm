@@ -22,11 +22,10 @@ final class Tables
 
     /**
      * @param class-string $class
-     * @return ?Table<TExecutor>
      */
-    public function get(string $class): ?Table
+    public function has(string $class): bool
     {
-        return $this->tables[$class] ?? null;
+        return isset($this->tables[$class]);
     }
 
     /**
