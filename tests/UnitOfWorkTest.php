@@ -8,12 +8,16 @@ use Testo\Assert;
 use Testo\Expect;
 use Testo\Test;
 use Thesis\Norm\Exception\DependencyCycle;
+use Thesis\Norm\Exception\UnitOfWorkClosed;
 use Thesis\Norm\Fixture\Article;
 use Thesis\Norm\Fixture\ArticleTable;
 use Thesis\Norm\Fixture\Comment;
 use Thesis\Norm\Fixture\CommentTable;
 use Thesis\Norm\Fixture\DependentTable;
+use Thesis\Norm\Fixture\HookedTable;
 use Thesis\Norm\Fixture\Storage;
+use Thesis\Norm\Fixture\Tag;
+use Thesis\Norm\Fixture\TagTable;
 
 #[Test]
 final readonly class UnitOfWorkTest
@@ -142,6 +146,151 @@ final readonly class UnitOfWorkTest
 
         Assert::same($storage->log, []);
         Assert::true($unitOfWork->isClosed);
+    }
+
+    public function dependencyCycleMessageOmitsEntitySetsOutsideOfCycle(): void
+    {
+        Expect::exception(DependencyCycle::class)->withMessage(\sprintf(
+            'Entity sets depend on each other in a cycle: %s -> %s -> %s.',
+            Article::class,
+            Comment::class,
+            Article::class,
+        ));
+
+        $unitOfWork = new UnitOfWork(new Storage());
+        $unitOfWork->entities(Tag::class, new DependentTable(new TagTable(), [Article::class]));
+        $unitOfWork->entities(Article::class, new DependentTable(new ArticleTable(), [Comment::class]));
+        $unitOfWork->entities(Comment::class, new DependentTable(new CommentTable(), [Article::class]));
+
+        $unitOfWork->flush();
+    }
+
+    public function entitiesReturnsSameSetForSameClass(): void
+    {
+        $unitOfWork = new UnitOfWork(new Storage());
+
+        Assert::same(
+            $unitOfWork->entities(Article::class, new ArticleTable()),
+            $unitOfWork->entities(Article::class, new ArticleTable()),
+        );
+    }
+
+    public function tableOfFirstRegistrationIsUsed(): void
+    {
+        $storage = new Storage();
+        $unitOfWork = new UnitOfWork($storage);
+        $unitOfWork->entities(Article::class, new ArticleTable());
+        $articles = $unitOfWork->entities(Article::class, new HookedTable(
+            new ArticleTable(),
+            static fn(): never => throw new \LogicException('Must not be called'),
+            static fn(): never => throw new \LogicException('Must not be called'),
+        ));
+
+        $articles->add(new Article('a', 'Title'));
+        $unitOfWork->flush();
+
+        Assert::same(array_keys($storage->articles), ['a']);
+    }
+
+    public function closeIsIdempotent(): void
+    {
+        $unitOfWork = new UnitOfWork(new Storage());
+
+        $unitOfWork->close();
+        $unitOfWork->close();
+
+        Assert::true($unitOfWork->isClosed);
+    }
+
+    public function unitOfWorkIsClosedAfterFlush(): void
+    {
+        $unitOfWork = new UnitOfWork(new Storage());
+
+        $unitOfWork->flush();
+
+        Assert::true($unitOfWork->isClosed);
+    }
+
+    public function flushCannotBeRepeated(): void
+    {
+        Expect::exception(UnitOfWorkClosed::class);
+
+        $unitOfWork = new UnitOfWork(new Storage());
+        $unitOfWork->flush();
+
+        $unitOfWork->flush();
+    }
+
+    public function closedUnitOfWorkCannotBeFlushed(): void
+    {
+        Expect::exception(UnitOfWorkClosed::class);
+
+        $unitOfWork = new UnitOfWork(new Storage());
+        $unitOfWork->close();
+
+        $unitOfWork->flush();
+    }
+
+    public function closedUnitOfWorkWritesNothing(): void
+    {
+        $storage = new Storage();
+        $unitOfWork = new UnitOfWork($storage);
+        $unitOfWork->entities(Article::class, new ArticleTable())->add(new Article('a', 'Title'));
+
+        $unitOfWork->close();
+
+        Assert::same($storage->log, []);
+    }
+
+    public function changesAreWrittenInBatches(): void
+    {
+        $storage = new Storage();
+        $storage->articles['a'] = self::ARTICLE;
+        $storage->articles['x'] = self::ARTICLE_X;
+        $storage->articles['y'] = ['id' => 'y', 'title' => 'Title', 'published_at' => null];
+        $storage->articles['z'] = ['id' => 'z', 'title' => 'Title', 'published_at' => null];
+        $unitOfWork = new UnitOfWork($storage);
+        $articles = $unitOfWork->entities(Article::class, new ArticleTable());
+
+        $articles->add(new Article('b', 'B'));
+        $articles->add(new Article('c', 'C'));
+        $articles->manageOne($storage->articles['a'])->title = 'A';
+        $articles->manageOne($storage->articles['x'])->title = 'X';
+        $articles->remove($articles->manageOne($storage->articles['y']));
+        $articles->remove($articles->manageOne($storage->articles['z']));
+        $unitOfWork->flush();
+
+        Assert::same($storage->log, [
+            ['insert', 'articles', [
+                ['title' => 'B', 'id' => 'b', 'published_at' => null],
+                ['title' => 'C', 'id' => 'c', 'published_at' => null],
+            ]],
+            ['update', 'articles', [
+                ['before' => ['title' => 'Title', 'id' => 'a', 'published_at' => null], 'after' => ['title' => 'A', 'id' => 'a', 'published_at' => null]],
+                ['before' => ['title' => 'Title', 'id' => 'x', 'published_at' => null], 'after' => ['title' => 'X', 'id' => 'x', 'published_at' => null]],
+            ]],
+            ['delete', 'articles', [
+                ['title' => 'Title', 'id' => 'y', 'published_at' => null],
+                ['title' => 'Title', 'id' => 'z', 'published_at' => null],
+            ]],
+        ]);
+    }
+
+    public function deleteReceivesSnapshotRatherThanCurrentRow(): void
+    {
+        $storage = new Storage();
+        $storage->articles['a'] = ['id' => 'a', 'title' => 'Title', 'published_at' => '2026-01-01 00:00:00+00'];
+        $unitOfWork = new UnitOfWork($storage);
+        $articles = $unitOfWork->entities(Article::class, new ArticleTable());
+
+        $article = $articles->manageOne($storage->articles['a']);
+        $article->title = 'New title';
+        $articles->remove($article);
+        $unitOfWork->flush();
+
+        Assert::same($storage->log, [['delete', 'articles', [
+            ['title' => 'Title', 'id' => 'a', 'published_at' => '2026-01-01 00:00:00+00:00'],
+        ]]]);
     }
 
     private static function storageWithArticleAndComment(): Storage
