@@ -6,12 +6,18 @@ namespace Authentication;
 
 use Amp\Postgres\PostgresConfig;
 use Amp\Postgres\PostgresConnectionPool;
+use Amp\Postgres\PostgresQueryError;
 use Ramsey\Uuid\Uuid;
 use Thesis\Norm\Exception\EntityAlreadyExists;
 use Thesis\Norm\UnitOfWork;
 use function Amp\async;
 
 require_once __DIR__ . '/../../vendor/autoload.php';
+
+/**
+ * @see https://www.postgresql.org/docs/current/errcodes-appendix.html
+ */
+const LOCK_NOT_AVAILABLE = '55P03';
 
 $postgres = new PostgresConnectionPool(
     new PostgresConfig(
@@ -60,11 +66,28 @@ async(static function () use ($postgres): void {
         $identity->changePassword($password, $newPassword);
     });
 
-    // authenticate: the identity is loaded for reading only, nothing is written
-    $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($id, $newPassword): void {
-        $identity = new IdentityRepository($unitOfWork)->find($id) ?? throw new \Exception('Not registered');
-        $identity->authenticate($newPassword);
+    // change the password back under a pessimistic lock: other transactions cannot lock the row until commit
+    $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($postgres, $id, $password, $newPassword): void {
+        $identity = new IdentityRepository($unitOfWork)->lock($id) ?? throw new \Exception('Not registered');
+
+        try {
+            $postgres->execute('select from identity where id = ? for update nowait', [$id->toString()]);
+
+            throw new \LogicException('Expected the row to be locked');
+        } catch (PostgresQueryError $error) {
+            if (($error->getDiagnostics()['sqlstate'] ?? null) !== LOCK_NOT_AVAILABLE) {
+                throw $error;
+            }
+        }
+
+        $identity->changePassword($newPassword, $password);
     });
 
-    echo "Registered, changed the password and authenticated {$id}\n";
+    // authenticate: the identity is loaded for reading only, nothing is written
+    $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($id, $password): void {
+        $identity = new IdentityRepository($unitOfWork)->find($id) ?? throw new \Exception('Not registered');
+        $identity->authenticate($password);
+    });
+
+    echo "Registered, changed the password twice, the second time under a lock, and authenticated {$id}\n";
 })->await();

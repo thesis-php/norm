@@ -104,6 +104,10 @@ final class UnitOfWork
      * or a pool, a failed write (e.g. ConcurrentModification on update) leaves the earlier writes in the storage.
      * Pass those only to a unit of work that does not write or when a partial write is acceptable.
      *
+     * The executor is used only by the writers, and a writer is called only for a non-empty batch: without changes
+     * the executor is not touched, so a lazily begun transaction (e.g. a lazy service of a DI container) is not
+     * begun at all, unless a BeforeFlush hook or a finder uses it.
+     *
      * @throws DependencyCycle if the entity sets depend on each other in a cycle
      * @throws UnitOfWorkClosed
      */

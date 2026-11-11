@@ -258,6 +258,33 @@ final readonly class UnitOfWorkTest
         Assert::same($storage->log, []);
     }
 
+    public function flushWithoutChangesDoesNotTouchLazyExecutor(): void
+    {
+        $storage = self::lazyStorage();
+        $unitOfWork = new UnitOfWork($storage);
+        $articles = $unitOfWork->entities(Article::class, new ArticleTable());
+        $comments = $unitOfWork->entities(Comment::class, new CommentTable());
+
+        $articles->manageOne(self::ARTICLE);
+        $comments->add($comment = new Comment('c', 'a'));
+        $comments->remove($comment);
+        $unitOfWork->flush();
+
+        Assert::true(new \ReflectionClass(Storage::class)->isUninitializedLazyObject($storage));
+    }
+
+    public function flushWithChangesInitializesLazyExecutor(): void
+    {
+        $storage = self::lazyStorage();
+        $unitOfWork = new UnitOfWork($storage);
+
+        $unitOfWork->entities(Article::class, new ArticleTable())->add(new Article('a', 'Title'));
+        $unitOfWork->flush();
+
+        Assert::false(new \ReflectionClass(Storage::class)->isUninitializedLazyObject($storage));
+        Assert::same(array_keys($storage->articles), ['a']);
+    }
+
     public function changesAreWrittenInBatches(): void
     {
         $storage = new Storage();
@@ -307,6 +334,14 @@ final readonly class UnitOfWorkTest
         Assert::same($storage->log, [['delete', 'articles', [
             ['title' => 'Title', 'id' => 'a', 'published_at' => '2026-01-01 00:00:00+00:00'],
         ]]]);
+    }
+
+    /**
+     * A storage that is initialized on first use, like a transaction begun lazily by a DI container.
+     */
+    private static function lazyStorage(): Storage
+    {
+        return new \ReflectionClass(Storage::class)->newLazyGhost(static function (Storage $storage): void {});
     }
 
     private static function storageWithArticleAndComment(): Storage

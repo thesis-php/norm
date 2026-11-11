@@ -183,6 +183,7 @@ Wrap this lifecycle in a helper once — see [`Transactor`](examples/authenticat
 
 - `new UnitOfWork($executor)` — `$executor` is whatever runs your queries, normally a transaction: `flush()` is
   atomic only within one, see [Guarantees](#guarantees). A connection or a pool fits a unit of work that only reads.
+  To keep transactions short, pass a lazily begun one, see [Locking](#locking).
   It is available as `$unitOfWork->executor` and is passed to every `Writer` call.
 - `entities(class-string $class, Mapper&Writer $table): EntitySet` — the entity set of the class. Every call with
   the same class returns the same set, so all repositories of one unit of work share one identity map per class.
@@ -250,14 +251,91 @@ Throw `ConcurrentModification` when an update or a delete affects no row.
   on failure, and the flush is all or nothing. With a connection in autocommit mode or a pool, a failed write
   (e.g. `ConcurrentModification` on update) leaves the earlier writes in the storage, and the closed unit of work
   cannot retry the rest.
+- **No changes, no writes.** The executor is used only by the writers, and a writer is called only for a non-empty
+  batch. A flush without changes does not touch the executor, so a lazily begun transaction is not begun at all,
+  see [Locking](#locking).
 - **Closing.** The unit of work is closed once the changes are collected, so entities cannot be changed while
   they are being written. After `flush()` — successful or not — or `close()`, `flush()`, `entities()`, `$executor`
   and every entity set throw `UnitOfWorkClosed`, so finders do not query on behalf of a finished business transaction.
 
+## Locking
+
+The table and the writer are the same for both kinds of locks: `update()` and `delete()` check the version
+loaded into `$change->before` and throw `ConcurrentModification`. What differs is how the repository reads
+and when the transaction begins.
+
+### Optimistic: short transactions, the default
+
+The version check catches concurrent changes, so reading does not need a transaction:
+
+- Finders read via a pool injected into the repository, not via `$unitOfWork->executor`.
+- The executor of the unit of work is a transaction begun lazily, on first use: a lazy service of your DI container
+  or a PHP lazy object. A flush without changes does not touch it, so a business transaction that changes nothing
+  never begins a database transaction, and the one that does holds it only while writing.
+- Whoever owns the scope (a middleware of the bus or the HTTP kernel) commits or rolls the transaction back only if
+  it has begun: `ReflectionClass::isUninitializedLazyObject()` or a flag of its own.
+
+```php
+final readonly class IdentityRepository
+{
+    /** @var EntitySet<Identity> */
+    private EntitySet $identities;
+
+    /** @param UnitOfWork<PostgresTransaction> $unitOfWork on a lazily begun transaction */
+    public function __construct(
+        private UnitOfWork $unitOfWork,
+        private PostgresConnectionPool $postgres,
+    ) {
+        $this->identities = $unitOfWork->entities(Identity::class, new IdentityTable());
+    }
+
+    public function find(UuidInterface $id): ?Identity
+    {
+        return $this->identities->find(
+            id: $id->toString(),
+            load: fn(): ?array => $this->postgres
+                ->execute('select id, password_hash, version from identity where id = ?', [$id->toString()])
+                ->fetchRow(),
+        );
+    }
+}
+```
+
+- Selects via a pool do not see one snapshot: two of them may see different states of the storage. The version
+  protects only the rows that are written; if a decision depends on an aggregate that is not changed, lock it
+  or bump its version too.
+- A version that comes from the client (a form field, `If-Match`) is compared by the domain before changing
+  the entity; the writer then checks the loaded one.
+
+### Pessimistic: lock for the whole business transaction
+
+For aggregates under contention, where waiting is cheaper than retrying (a balance, a stock, a counter):
+
+```php
+public function lock(UuidInterface $id): ?Identity
+{
+    return $this->identities->manageOne(
+        $this->unitOfWork->executor
+            ->execute('select id, password_hash, version from identity where id = ? for update', [$id->toString()])
+            ->fetchRow(),
+    );
+}
+```
+
+- **Lock via `$unitOfWork->executor`, never via a pool.** In autocommit mode the lock is released right after
+  the select, silently. A lazily begun transaction begins at the lock and lasts until the commit: keep this work
+  short and do not call external services inside.
+- **Register via `manageOne()`, not `find()`.** `find()` does not query for an entity that is already managed
+  and would return it without taking the lock. `manageOne()` always runs the query; if the entity was loaded
+  earlier without a lock, the row is ignored and the stale entity is returned, but the version check on update
+  still catches a concurrent change. Lock an aggregate before any other load of it in the unit of work.
+- Deadlocks (SQLSTATE `40P01`) and `lock_not_available` (`55P03`, with `nowait` or `lock_timeout`) are thrown by your
+  driver, not by NORM: retry the whole transaction, like on `ConcurrentModification`. For queues use `skip locked`.
+
 ## Writing is not reading for display
 
-Repositories load only the aggregates that are going to change: by id, sometimes `for update`. Every managed
-entity costs a hydration, a snapshot and a comparison on flush. Lists, search results and reports are read
+Repositories load only the aggregates that are going to change: by id, sometimes [`for update`](#locking).
+Every managed entity costs a hydration, a snapshot and a comparison on flush. Lists, search results and reports are read
 by separate query services directly via the connection into read models, bypassing the unit of work.
 A `findAll()` through an entity set is an anti-pattern.
 

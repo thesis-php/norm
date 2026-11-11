@@ -1,27 +1,21 @@
 ---
 name: norm-repository
-description: 'Write a repository on top of thesis/norm (NORM, Not An ORM): an entity table implementing Mapper and Writer (row phpstan-type, entityToRow/rowToEntity round trip, batched insert/update/delete, optimistic lock via version, EntityAlreadyExists on SQLSTATE 23505), a repository class with finders via EntitySet::find()/manageOne()/manageAll(), optional RowId/DependsOn/BeforeFlush, the unit of work lifecycle and tests. Use when the user asks to add or change a repository, a table, a finder or persistence of an entity in a project using thesis/norm, or mentions UnitOfWork, EntitySet, Mapper, Writer.'
+description: 'Write tables (Mapper + Writer) and repositories on top of thesis/norm (NORM, Not An ORM): row types, entity-row mapping, batched writes, optimistic and pessimistic locking, finders via EntitySet, the unit of work lifecycle and tests. Use when adding or changing a repository, a table, a finder or persistence of an entity in a project using thesis/norm, or when UnitOfWork, EntitySet, Mapper or Writer are mentioned.'
 ---
 
 # Writing a repository with thesis/norm
 
-NORM gives an identity map, change detection and an ordered flush. Everything else is hand-written: SQL,
-conversion between entities and rows, and writing rows. Verify signatures against the installed
-`vendor/thesis/norm/src/` before writing code — the API is pre-1.0.
+NORM gives an identity map, change detection and an ordered flush; SQL, mapping and writes are hand-written.
+The API is pre-1.0: check signatures in `vendor/thesis/norm/src/` first.
 
-## Pieces
+- **Entity** — a plain object.
+- **Table** — one `final readonly` class implementing `Mapper<TEntity, TRow>` and `Writer<TExecutor, TRow>`.
+- **Repository** — a `final readonly` class: gets an `EntitySet` from `UnitOfWork::entities()`, exposes domain finders
+  and `add()`/`remove()` if needed.
 
-| Piece | Who writes it | What it does |
-|---|---|---|
-| Entity | you | plain object, no base class, no attributes |
-| Table: `Mapper<TEntity, TRow>` + `Writer<TExecutor, TRow>` | you, one `final readonly` class | converts entities ↔ rows, writes batches of rows |
-| Repository | you, one `final readonly` class | gets an `EntitySet` from the unit of work, exposes domain finders and `add()`/`remove()` |
-| `UnitOfWork<TExecutor>` | library | one per business transaction; `entities()`, `flush()`, `close()`, `$executor` |
-| `EntitySet<TEntity>` | library | identity map + change tracking of one entity class |
+For a new entity, recommend a locking mode and let the user confirm it (section 5).
 
 ## 1. Row type
-
-Declare the row once as a phpstan-type on the table and import it where needed:
 
 ```php
 /**
@@ -33,21 +27,17 @@ Declare the row once as a phpstan-type on the table and import it where needed:
 final readonly class ArticleTable implements Mapper, Writer
 ```
 
-Rules:
+- **Only scalars, nulls and arrays of them.** Rows are compared with `!==`: an object (date, UUID, value object)
+  makes the entity look changed on every flush. Format dates, `toString()` UUIDs, `->value` enums.
+- The row is what `entityToRow()` returns; `rowToEntity()` must also accept the raw driver row.
+- Nested arrays are fine for aggregates (`'lines' => [...]`); diff them in `update()`.
 
-- **Only scalars, nulls and arrays of them in a row.** Change detection compares rows with `!==`; an object
-  (`DateTimeImmutable`, `UuidInterface`, a value object) compares by reference and makes the entity look changed
-  on every flush. Format dates to strings, UUIDs via `toString()`, enums via `->value`.
-- Keys and value formats are the ones `entityToRow()` produces; they need not match the raw driver row
-  (the snapshot is normalized via `entityToRow(rowToEntity($row))`), but `rowToEntity()` must accept the raw row.
-- Nested arrays are fine for aggregates (`'lines' => [...]`), diff them in `update()` via `Change::$before`/`$after`.
-
-## 2. Mapper: a lossless round trip
+## 2. Mapper
 
 ```php
 public function entityId(object $entity): string
 {
-    return $entity->id->toString(); // non-empty, unique within the entity class
+    return $entity->id->toString();
 }
 
 public function entityToRow(object $entity): array
@@ -71,19 +61,15 @@ public function rowToEntity(array $row): object
 }
 ```
 
-`entityToRow(rowToEntity($row))` must be stable: a lossy conversion hides changes or causes spurious updates.
-Hydrate private state without calling domain constructors with side effects (no events recorded on hydration).
+- `entityToRow(rowToEntity($row))` must be lossless and stable.
+- Hydration has no side effects: no domain events, no validation that can fail on stored data.
+- Implement `RowId::rowId(array $row): string` when the id is in the row, to skip hydrating managed entities.
 
-If the id can be taken from a row cheaply, also implement `RowId` (`rowId(array $row): string`): otherwise every
-loaded row of an already managed entity is hydrated just to get its id.
+## 3. Writer
 
-## 3. Writer: batches, one prepared statement
-
-Every method gets the executor of the unit of work and a non-empty list. Prepare once, execute per row:
+Each method gets the unit of work's executor and a non-empty batch. Prepare once, execute per row:
 
 ```php
-private const string UNIQUE_VIOLATION = '23505';
-
 public function insert(object $executor, array $rows): void
 {
     $statement = $executor->prepare('insert into article (id, title, published_at, version) values (:id, :title, :published_at, :version)');
@@ -92,7 +78,7 @@ public function insert(object $executor, array $rows): void
         try {
             $statement->execute($row);
         } catch (PostgresQueryError $error) {
-            if (($error->getDiagnostics()['sqlstate'] ?? null) === self::UNIQUE_VIOLATION) {
+            if (($error->getDiagnostics()['sqlstate'] ?? null) === '23505') {
                 throw new EntityAlreadyExists(previous: $error);
             }
 
@@ -110,7 +96,7 @@ public function update(object $executor, array $changes): void
             'id' => $change->before['id'],
             'title' => $change->after['title'],
             'published_at' => $change->after['published_at'],
-            'version' => $change->before['version'], // optimistic lock against the loaded version
+            'version' => $change->before['version'],
         ]);
 
         if ($result->getRowCount() !== 1) {
@@ -121,20 +107,13 @@ public function update(object $executor, array $changes): void
 
 public function delete(object $executor, array $rows): void
 {
-    $statement = $executor->prepare('delete from article where id = ? and version = ?');
-
-    foreach ($rows as $row) { // rows as loaded
-        if ($statement->execute([$row['id'], $row['version']])->getRowCount() !== 1) {
-            throw new ConcurrentModification();
-        }
-    }
+    // the same with 'delete from article where id = ? and version = ?' and ConcurrentModification
 }
 ```
 
-- Detect duplicates by SQLSTATE `23505`, never by the error text.
-- `update()` receives only changed rows; check the lock against `before`, write values from `after`.
-  Writing only the changed columns is possible by comparing `before` and `after`.
-- Keep the writer stateless: no caching of statements or entities between calls.
+- Duplicates by SQLSTATE `23505`, never by the message.
+- `update()` gets only changed rows: lock against `before`, write from `after`.
+- Stateless: nothing cached between calls.
 
 ## 4. Repository
 
@@ -165,37 +144,71 @@ final readonly class ArticleRepository
     public function findDraftsOf(UuidInterface $authorId): array
     {
         return $this->articles->manageAll(
-            $this->unitOfWork->executor->execute('select ... where author_id = ? and published_at is null for update', [$authorId->toString()]),
+            $this->unitOfWork->executor->execute('select ... where author_id = ? and published_at is null', [$authorId->toString()]),
         );
-    }
-
-    public function add(Article $article): void
-    {
-        $this->articles->add($article);
     }
 }
 ```
 
-- **Every loaded row goes through the entity set**: `find()` for finders by id (sees pending adds and removals,
-  does not query for managed entities), `manageOne()`/`manageAll()` for other criteria (reflect the storage).
-  Never return `rowToEntity()` results directly — they would bypass the identity map and change detection.
-- Add `add()`/`remove()` only if the domain needs them. No `save()`: changes of managed entities are detected.
-- Read the executor via `$this->unitOfWork->executor` at query time, not in the constructor.
-- **Load only what is going to change** (by id, sometimes `for update`). Lists, search and reports belong to
-  separate query services that read straight from the connection into read models, bypassing the unit of work.
-  A `findAll()` through an entity set is an anti-pattern.
+- **Every loaded row goes through the entity set**: `find()` by id (sees pending adds and removals, skips the query
+  for managed entities), `manageOne()`/`manageAll()` by other criteria (reflect the storage). Never return
+  `rowToEntity()` results directly.
+- No `save()`: changes are detected. Read `$this->unitOfWork->executor` at query time, not in the constructor.
+- **Load only what will change.** Lists, search and reports are query services reading straight into read models;
+  `findAll()` through an entity set is an anti-pattern.
 
-## 5. Optional table interfaces
+## 5. Locking
 
-- `DependsOn::dependsOn(): non-empty-list<class-string>` — entity classes this table's rows reference by foreign
-  key. Then inserts/updates go after them and deletes before them. Do not implement it without dependencies.
-- `BeforeFlush::beforeFlush(object $entity, EntityState $state)` — called for every managed entity before changes
-  are collected (`New`, `Unchanged`, `Changed`, `Removed`). Use it for outbox (`releaseEvents()` → add messages to
-  another entity set), cascades, `updatedAt` on `Changed`. Entities added inside hooks do not get the hook.
+The table is the same: `update()`/`delete()` check `before['version']`. The finders differ.
 
-## 6. Lifecycle
+**Recommend, then confirm.** Pick a mode from the domain and the code, give a one-line reason and ask the user
+to confirm (skip if the user has chosen already or named a `for update` finder):
 
-One unit of work per business transaction, created together with its repositories (scoped in the DI container):
+- **Optimistic** (the default, also when unsure — say so): conflicts are rare (one owner edits it: profile,
+  settings, draft), slow work or external calls between read and write, edits via forms (version from the client),
+  mostly read.
+- **Pessimistic**: a hot row with many concurrent writers (balance, stock, counter, limit, seats), expensive retries,
+  check-then-act on data that is not written (lock the parent), workers claiming jobs (`for update skip locked`).
+- **Both**: usually calm, but with one or two contended operations (`reserve()`, `decrement()`, `allocate()`).
+- Signals: verbs `reserve`/`allocate`/`claim`/`decrement`/`withdraw`, concurrent consumers, quantities changed
+  by different users, existing `for update` queries → pessimistic; an owner (`ownerId`) whose commands alone
+  change it → optimistic.
+
+**Optimistic: short transactions.** Finders read via a pool injected into the repository instead of the executor.
+The unit of work gets a transaction begun lazily (a lazy DI service or a PHP lazy object): `flush()` without changes
+does not touch it, and the scope owner commits only a begun one. Selects via a pool are not one snapshot: if a
+decision depends on an aggregate that is not written, lock it or bump its version. Compare a client's version
+in the domain before the change.
+
+**Pessimistic: lock the row until commit.**
+
+```php
+public function lock(UuidInterface $id): ?Article
+{
+    return $this->articles->manageOne(
+        $this->unitOfWork->executor
+            ->execute('select id, title, published_at, version from article where id = ? for update', [$id->toString()])
+            ->fetchRow(),
+    );
+}
+```
+
+- **Via `$this->unitOfWork->executor`, never via a pool**: in autocommit the lock is released at once.
+- **`manageOne()`, never `find()`**: `find()` skips the query for a managed entity and takes no lock.
+  Lock before any other load of the aggregate in the unit of work.
+- Keep the locked work short, no external calls. Deadlock `40P01` and `lock_not_available` `55P03` come
+  from the driver: retry the whole transaction.
+
+## 6. Optional table interfaces
+
+- `DependsOn::dependsOn(): non-empty-list<class-string>` — entity classes referenced by foreign keys: inserts and
+  updates go after them, deletes before. Not implemented without dependencies.
+- `BeforeFlush::beforeFlush(object $entity, EntityState $state)` — for every managed entity before changes are
+  collected: outbox (`releaseEvents()` into another entity set), cascades, `updatedAt` on `Changed`.
+
+## 7. Lifecycle
+
+One unit of work per business transaction, scoped together with its repositories:
 
 ```php
 $transaction = $postgres->beginTransaction();
@@ -212,20 +225,18 @@ try {
 }
 ```
 
-Pass a transaction as the executor of a unit of work that writes: `flush()` does not begin or commit one, so with
-a connection in autocommit mode or a pool a failed write leaves the earlier ones in the storage.
-After `flush()` (successful or not) or `close()` the unit of work cannot be reused. Never share one between fibers.
-`EntityAlreadyExists` and `ConcurrentModification` are worth retrying the whole transaction;
-`DuplicateEntity`, `EntityNotManaged`, `UnitOfWorkClosed`, `DependencyCycle` are bugs.
+- A unit of work that writes needs a transaction: `flush()` is atomic only within one.
+- Not reusable after `flush()` or `close()`, never shared between fibers.
+- Retry the whole transaction on `EntityAlreadyExists` and `ConcurrentModification`; `DuplicateEntity`,
+  `EntityNotManaged`, `UnitOfWorkClosed`, `DependencyCycle` are bugs.
 
-## 7. Tests
+## 8. Tests
 
-- **Table**: test against a real database (a service in `compose.yaml`). For every row shape assert the round trip
-  `entityToRow(rowToEntity($row))` and that a loaded and flushed entity without changes produces no queries.
-  Test `insert()` of a duplicate → `EntityAlreadyExists`, `update()`/`delete()` of a stale version →
-  `ConcurrentModification`. Build `new Change($before, $after)` directly to test `update()`.
-- **Repository**: create `new UnitOfWork($transaction)` per test, load via the finder, change, `flush()`, then
-  assert rows in the database. Check that `find()` returns the same instance twice and sees `add()`/`remove()`.
-- **Domain handlers**: they depend on the repository class; give them a repository over a unit of work on a test
-  database, or extract an interface if a fake is really needed.
-- Roll back the transaction at the end of each test instead of truncating tables.
+Against a real database (a `compose.yaml` service), rolling back the transaction after each test:
+
+- **Table**: the round trip for every row shape; an unchanged loaded entity writes nothing; a duplicate insert →
+  `EntityAlreadyExists`; a stale update/delete → `ConcurrentModification` (build `new Change($before, $after)`).
+- **Repository**: `new UnitOfWork($transaction)` per test, load, change, `flush()`, assert rows; `find()` returns
+  the same instance twice and sees `add()`/`remove()`; for `lock()`, `for update nowait` from another
+  transaction fails with `55P03`.
+- **Handlers**: use a repository over a test database; extract an interface only if a fake is really needed.
