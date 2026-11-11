@@ -6,9 +6,6 @@ export DOCKER_USER ?= $(shell id -u):$(shell id -g)
 
 RUN ?= $(if $(IN_CONTAINER),,$(DOCKER_COMPOSE) run --rm php)
 COMPOSER ?= $(RUN) composer
-# Installs without the global plugins of the image: its global infection/extension-installer would shadow
-# the project one and register the project's Infection extensions (testo/bridge-infection) in the wrong place.
-COMPOSER_INSTALL ?= $(RUN) env COMPOSER_HOME=/tmp/composer COMPOSER_CACHE_DIR=/composer/cache composer
 
 # Container
 
@@ -33,20 +30,20 @@ down: ## Stop services
 
 i: install
 install: ## (i) Install dependencies
-	$(COMPOSER_INSTALL) install
+	$(COMPOSER) install
 	@rm -f vendor/.lowest
 	@touch vendor
 .PHONY: i install
 
 u: update
 update: ## (u) Update dependencies
-	$(COMPOSER_INSTALL) update
+	$(COMPOSER) update
 	@rm -f vendor/.lowest
 	@touch vendor
 .PHONY: u update
 
 install-lowest: ## Install lowest possible dependencies
-	$(COMPOSER_INSTALL) update --prefer-lowest --prefer-stable
+	$(COMPOSER) update --prefer-lowest --prefer-stable
 	@touch vendor/.lowest
 	@touch vendor
 .PHONY: install-lowest

@@ -13,10 +13,9 @@ Everything runs in Docker through `make` (no local PHP needed). `make help` list
   that only produces equivalent mutants.
 - `make check` — everything CI runs, including `infect`.
 - `make example` — runs `examples/authentication` against the `postgres` service; it must keep passing.
-- Install dependencies via `make install`/`make update` only: they run Composer without the global plugins
-  of the image, otherwise Infection extensions (`testo/bridge-infection`) are not registered.
-- Installing also syncs AI skills via `llm/skills` (`skills.json`) into `.claude/skills` (not committed): the Testo
-  skills (`testo-write-tests`, `testo-mutation-testing`, …) and this package's own `skills/norm-repository`.
+- `make install`/`make update` also sync AI skills via `llm/skills` (`skills.json`) into `.claude/skills`
+  (not committed): the Testo skills (`testo-write-tests`, `testo-mutation-testing`, …) and this package's own
+  `skills/norm-repository`.
   Edit skills in `skills/`, never in `.claude/skills`.
 
 ## Code conventions
