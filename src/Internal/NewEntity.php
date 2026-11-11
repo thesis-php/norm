@@ -9,26 +9,20 @@ use Thesis\Norm\Exception\DuplicateEntity;
 use Thesis\Norm\Exception\EntityNotManaged;
 
 /**
- * An entity that does not exist in the storage yet.
+ * An entity that does not exist in the storage yet. Once removed, it is no longer managed.
  *
  * @internal
  *
  * @template TEntity of object
  */
-final class NewEntity
+final readonly class NewEntity
 {
-    /**
-     * @var ?TEntity
-     */
-    public private(set) ?object $entity = null;
-
     /**
      * @param TEntity $entity
      */
-    public function __construct(object $entity)
-    {
-        $this->entity = $entity;
-    }
+    public function __construct(
+        public object $entity,
+    ) {}
 
     /**
      * @param TEntity $entity
@@ -36,11 +30,9 @@ final class NewEntity
      */
     public function add(object $entity): void
     {
-        if ($this->entity !== null && $this->entity !== $entity) {
+        if ($entity !== $this->entity) {
             throw new DuplicateEntity();
         }
-
-        $this->entity = $entity;
     }
 
     /**
@@ -49,11 +41,9 @@ final class NewEntity
      */
     public function remove(object $entity): void
     {
-        if ($this->entity !== null && $this->entity !== $entity) {
+        if ($entity !== $this->entity) {
             throw new EntityNotManaged();
         }
-
-        $this->entity = null;
     }
 
     /**
@@ -69,8 +59,6 @@ final class NewEntity
      */
     public function collectChanges(ChangeSet $changeSet): void
     {
-        if ($this->entity !== null) {
-            $changeSet->insert($this->entity);
-        }
+        $changeSet->insert($this->entity);
     }
 }

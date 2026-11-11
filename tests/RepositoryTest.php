@@ -240,6 +240,70 @@ final readonly class RepositoryTest
         $repository->remove(new Article('a', 'Title'));
     }
 
+    #[ExpectException(EntityNotManaged::class)]
+    public function removingAnotherEntityWithSameIdAfterAddAndRemoveThrows(): void
+    {
+        $repository = new ArticleRepository(new UnitOfWork(new Storage()));
+        $article = new Article('a', 'Title');
+        $repository->add($article);
+        $repository->remove($article);
+
+        $repository->remove(new Article('a', 'Title'));
+    }
+
+    #[ExpectException(EntityNotManaged::class)]
+    public function removingAddedEntityTwiceThrows(): void
+    {
+        $repository = new ArticleRepository(new UnitOfWork(new Storage()));
+        $article = new Article('a', 'Title');
+        $repository->add($article);
+        $repository->remove($article);
+
+        $repository->remove($article);
+    }
+
+    public function removingLoadedEntityTwiceIsIdempotent(): void
+    {
+        $storage = self::storageWithArticle();
+        $unitOfWork = new UnitOfWork($storage);
+        $repository = new ArticleRepository($unitOfWork);
+        $article = $repository->find('a');
+        Assert::notNull($article);
+
+        $repository->remove($article);
+        $repository->remove($article);
+        $unitOfWork->flush();
+
+        Assert::same($storage->articles, []);
+    }
+
+    public function anotherEntityWithSameIdCanBeAddedAfterAddAndRemove(): void
+    {
+        $storage = new Storage();
+        $unitOfWork = new UnitOfWork($storage);
+        $repository = new ArticleRepository($unitOfWork);
+        $repository->add($article = new Article('a', 'Title'));
+        $repository->remove($article);
+
+        $repository->add(new Article('a', 'New title'));
+        $unitOfWork->flush();
+
+        Assert::same($storage->articles, ['a' => ['title' => 'New title', 'id' => 'a', 'published_at' => null]]);
+    }
+
+    public function findLoadsEntityAddedAndRemoved(): void
+    {
+        $repository = new ArticleRepository(new UnitOfWork(self::storageWithArticle()));
+        $repository->add($added = new Article('a', 'New title'));
+        $repository->remove($added);
+
+        $found = $repository->find('a');
+
+        Assert::notNull($found);
+        Assert::notSame($found, $added);
+        Assert::same($found->title, 'Title');
+    }
+
     #[ExpectException(EntityAlreadyExists::class)]
     public function storageErrorIsPropagated(): void
     {

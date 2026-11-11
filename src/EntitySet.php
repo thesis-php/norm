@@ -59,7 +59,7 @@ final class EntitySet
             return $managed->isRemoved ? null : $managed->entity;
         }
 
-        if ($managed?->entity !== null) {
+        if ($managed !== null) {
             return $managed->entity;
         }
 
@@ -93,7 +93,7 @@ final class EntitySet
             return $managed->entity;
         }
 
-        if ($managed instanceof NewEntity && $managed->entity !== null) {
+        if ($managed !== null) {
             throw new DuplicateEntity();
         }
 
@@ -145,6 +145,9 @@ final class EntitySet
     }
 
     /**
+     * A loaded entity is deleted on flush unless it is passed to add() again; removing it twice is a no-op.
+     * An entity passed to add() is just forgotten: it is no longer managed.
+     *
      * @param TEntity $entity
      * @throws EntityNotManaged
      * @throws UnitOfWorkClosed
@@ -153,7 +156,13 @@ final class EntitySet
     {
         $this->ensureNotClosed();
 
-        ($this->entities[$this->mapper->entityId($entity)] ?? throw new EntityNotManaged())->remove($entity);
+        $id = $this->mapper->entityId($entity);
+        $managed = $this->entities[$id] ?? throw new EntityNotManaged();
+        $managed->remove($entity);
+
+        if ($managed instanceof NewEntity) {
+            unset($this->entities[$id]);
+        }
     }
 
     /**
@@ -166,9 +175,7 @@ final class EntitySet
         $entities = [];
 
         foreach ($this->entities as $managed) {
-            if ($managed->entity !== null) {
-                $entities[] = $managed->entity;
-            }
+            $entities[] = $managed->entity;
         }
 
         return $entities;

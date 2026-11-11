@@ -38,6 +38,7 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 
 ### Fixed
 
+- `EntitySet::remove()` of an entity passed to `add()` forgets it, so removing it again or removing another entity with the same id throws `EntityNotManaged` instead of being silently accepted.
 - Entity sets now throw `UnitOfWorkClosed` after `UnitOfWork::close()` or a failed `UnitOfWork::flush()`.
 
 ## [0.2.0] 2026-02-22
