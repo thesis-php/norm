@@ -26,7 +26,7 @@ flush order — the rest is plain code:
 - **SQL made for the entity.** Use everything your database offers (`json_agg`, `jsonb`, `unnest`, `skip locked`),
   not the subset an ORM supports.
 - **Small contract.** Two classes and two interfaces at the core, three optional table interfaces
-  and a ready [`norm-repository`](skills/norm-repository/SKILL.md) skill.
+  and a ready [`thesis-norm-repository`](skills/thesis-norm-repository/SKILL.md) skill.
 - **Checked by tools.** PHPStan generics tie rows, mappers and writers together; misuse throws a dedicated exception.
 - **Every table looks the same.** One is a template for the next.
 
@@ -38,7 +38,7 @@ composer require thesis/norm
 
 ### AI skill
 
-The package ships the [`norm-repository`](skills/norm-repository/SKILL.md) skill that teaches coding agents
+The package ships the [`thesis-norm-repository`](skills/thesis-norm-repository/SKILL.md) skill that teaches coding agents
 to write tables and repositories. With [`llm/skills`](https://github.com/roxblnfk/skills) installed in your project
 it is synced automatically.
 

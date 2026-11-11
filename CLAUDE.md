@@ -1,7 +1,7 @@
 # thesis/norm
 
 NORM (Not An ORM): a minimal unit of work for hand-written repositories. See README.md for the concepts
-and the public contract, `skills/norm-repository/SKILL.md` for how users write tables and repositories.
+and the public contract, `skills/thesis-norm-repository/SKILL.md` for how users write tables and repositories.
 
 ## Commands
 
@@ -15,7 +15,7 @@ Everything runs in Docker through `make` (no local PHP needed). `make help` list
 - `make example` — runs `examples/authentication` against the `postgres` service; it must keep passing.
 - `make install`/`make update` also sync AI skills via `llm/skills` (`skills.json`) into `.claude/skills`
   (not committed): the Testo skills (`testo-write-tests`, `testo-mutation-testing`, …) and this package's own
-  `skills/norm-repository`.
+  `skills/thesis-norm-repository`.
   Edit skills in `skills/`, never in `.claude/skills`.
 
 ## Code conventions

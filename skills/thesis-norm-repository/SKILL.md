@@ -1,5 +1,5 @@
 ---
-name: norm-repository
+name: thesis-norm-repository
 description: 'Write tables (Mapper + Writer) and repositories on top of thesis/norm (NORM, Not An ORM): row types, entity-row mapping, batched writes, optimistic and pessimistic locking, finders via EntitySet, the unit of work lifecycle and tests. Use when adding or changing a repository, a table, a finder or persistence of an entity in a project using thesis/norm, or when UnitOfWork, EntitySet, Mapper or Writer are mentioned.'
 ---
 
