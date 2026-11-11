@@ -5,6 +5,9 @@ and an ordered flush — and nothing else: no mapping metadata, no query builder
 You write the SQL (or whatever your storage speaks), the conversion between entities and rows,
 and the code that writes rows. NORM decides **what** to write and **when**.
 
+**Built for coding agents:** what an ORM generates, an agent writes as plain code,
+see [why](#why-norm-fits-coding-agents).
+
 |                          | ORM                                 | NORM                                                    |
 |--------------------------|-------------------------------------|---------------------------------------------------------|
 | Mapping                  | attributes / XML / reflection       | your `entityToRow()` / `rowToEntity()`                  |
@@ -13,6 +16,18 @@ and the code that writes rows. NORM decides **what** to write and **when**.
 | Identity map             | yes                                 | yes, per entity class                                   |
 | Change detection         | yes                                 | yes, by comparing rows                                  |
 | Relations, lazy loading  | yes                                 | no: load aggregates explicitly                          |
+
+## Why NORM fits coding agents
+
+Boilerplate is cheap for an agent, hidden magic is not. NORM does only the hard part — identity map, change detection,
+flush order — the rest is plain code:
+
+- **Nothing is hidden.** Mapping, queries and writes are PHP an agent reads and debugs like any other code.
+- **SQL made for the entity.** Use everything your database offers (`json_agg`, `jsonb`, `unnest`, `skip locked`),
+  not the subset an ORM supports.
+- **Small contract.** Two classes, two interfaces and a ready [`norm-repository`](skills/norm-repository/SKILL.md) skill.
+- **Checked by tools.** PHPStan generics tie rows, mappers and writers together; misuse throws a dedicated exception.
+- **Every table looks the same.** One is a template for the next.
 
 ## Installation
 
@@ -46,7 +61,11 @@ A **table** converts entities to rows and back ([`Mapper`](src/Mapper.php)) and 
 
 ```php
 /**
- * @phpstan-type Row = array{id: non-empty-string, password_hash: non-empty-string, version: positive-int}
+ * @phpstan-type Row = array{
+ *     id: non-empty-string,
+ *     password_hash: non-empty-string,
+ *     version: positive-int,
+ * }
  * @implements Mapper<Identity, Row>
  * @implements Writer<PostgresLink, Row>
  */
@@ -59,19 +78,36 @@ final readonly class IdentityTable implements Mapper, Writer
 
     public function entityToRow(object $entity): array
     {
-        return ['id' => $entity->id->toString(), 'password_hash' => $entity->passwordHash, 'version' => $entity->version];
+        return [
+            'id' => $entity->id->toString(),
+            'password_hash' => $entity->passwordHash,
+            'version' => $entity->version,
+        ];
     }
 
     public function rowToEntity(array $row): object
     {
-        return new Identity(Uuid::fromString($row['id']), $row['password_hash'], $row['version']);
+        return new Identity(
+            id: Uuid::fromString($row['id']),
+            passwordHash: $row['password_hash'],
+            version: $row['version'],
+        );
     }
 
-    public function insert(object $executor, array $rows): void { /* insert into identity ... */ }
+    public function insert(object $executor, array $rows): void
+    {
+        // insert into identity ...
+    }
 
-    public function update(object $executor, array $changes): void { /* update identity ... where version = :before.version */ }
+    public function update(object $executor, array $changes): void
+    {
+        // update identity ... where version = :before.version
+    }
 
-    public function delete(object $executor, array $rows): void { /* delete from identity ... */ }
+    public function delete(object $executor, array $rows): void
+    {
+        // delete from identity ...
+    }
 }
 ```
 
@@ -94,9 +130,18 @@ final readonly class IdentityRepository
     public function find(UuidInterface $id): ?Identity
     {
         return $this->identities->find(
-            $id->toString(),
-            fn(): ?array => $this->unitOfWork->executor
-                ->execute('select id, password_hash, version from identity where id = ?', [$id->toString()])
+            id: $id->toString(),
+            load: fn(): ?array => $this
+                ->unitOfWork
+                ->executor
+                ->execute(
+                    <<<'SQL'
+                        select id, password_hash, version
+                        from identity
+                        where id = ?
+                        SQL,
+                    [$id->toString()],
+                )
                 ->fetchRow(),
         );
     }
