@@ -8,6 +8,7 @@ use Thesis\Norm\Change;
 use Thesis\Norm\Exception\ConcurrentModification;
 use Thesis\Norm\Exception\EntityAlreadyExists;
 use Thesis\Norm\Mapper;
+use Thesis\Norm\RowId;
 use Thesis\Norm\Writer;
 
 /**
@@ -15,8 +16,9 @@ use Thesis\Norm\Writer;
  *
  * @implements Mapper<Article, Row>
  * @implements Writer<Storage, Row>
+ * @implements RowId<Row>
  */
-final readonly class ArticleTable implements Mapper, Writer
+final readonly class ArticleTable implements Mapper, Writer, RowId
 {
     public function entityId(object $entity): string
     {

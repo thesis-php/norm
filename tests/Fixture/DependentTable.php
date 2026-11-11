@@ -52,11 +52,6 @@ final readonly class DependentTable implements Mapper, Writer, DependsOn, Before
         return $this->table->entityToRow($entity);
     }
 
-    public function rowId(array $row): string
-    {
-        return $this->table->rowId($row);
-    }
-
     public function rowToEntity(array $row): object
     {
         return $this->table->rowToEntity($row);

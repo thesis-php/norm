@@ -9,6 +9,7 @@ namespace Thesis\Norm;
  *
  * entityToRow() and rowToEntity() must be mutually inverse: change detection compares
  * entityToRow() results, so a lossy conversion either hides changes or produces spurious updates.
+ * Implement {@see RowId} as well to avoid hydrating rows of already managed entities.
  *
  * @api
  *
@@ -28,12 +29,6 @@ interface Mapper
      * @return TRow
      */
     public function entityToRow(object $entity): array;
-
-    /**
-     * @param TRow $row
-     * @return non-empty-string
-     */
-    public function rowId(array $row): string;
 
     /**
      * @param TRow $row

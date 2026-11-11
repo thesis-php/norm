@@ -85,7 +85,13 @@ final class EntitySet
             return null;
         }
 
-        $id = $this->mapper->rowId($row);
+        if ($this->mapper instanceof RowId) {
+            $id = $this->mapper->rowId($row);
+            $entity = null;
+        } else {
+            $entity = $this->mapper->rowToEntity($row);
+            $id = $this->mapper->entityId($entity);
+        }
 
         $managed = $this->entities[$id] ?? null;
 
@@ -97,7 +103,7 @@ final class EntitySet
             throw new DuplicateEntity();
         }
 
-        $entity = $this->mapper->rowToEntity($row);
+        $entity ??= $this->mapper->rowToEntity($row);
         // The snapshot is taken via entityToRow() rather than from the raw row, so that storage-specific
         // representations (date formats, scalar types, extra columns) do not make the entity look changed.
         $this->entities[$id] = new PersistedEntity($entity, $this->mapper->entityToRow($entity));

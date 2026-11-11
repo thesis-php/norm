@@ -14,6 +14,8 @@ use Thesis\Norm\Exception\UnitOfWorkClosed;
 use Thesis\Norm\Fixture\Article;
 use Thesis\Norm\Fixture\ArticleRepository;
 use Thesis\Norm\Fixture\ArticleTable;
+use Thesis\Norm\Fixture\Comment;
+use Thesis\Norm\Fixture\CommentTable;
 use Thesis\Norm\Fixture\Storage;
 
 #[Test]
@@ -102,6 +104,23 @@ final readonly class RepositoryTest
         $article = $articles->find('a', static fn(): array => self::ARTICLE);
 
         Assert::same($articles->manageOne(self::ARTICLE), $article);
+    }
+
+    public function rowIsIdentifiedByRowIdWithoutHydration(): void
+    {
+        $articles = new UnitOfWork(new Storage())->entities(Article::class, new ArticleTable());
+        $article = $articles->manageOne(self::ARTICLE);
+
+        // A partial row cannot be hydrated, but rowId() is enough to find the managed entity.
+        Assert::same($articles->manageOne(['id' => 'a']), $article);
+    }
+
+    public function rowIsIdentifiedByHydratedEntityWithoutRowId(): void
+    {
+        $comments = new UnitOfWork(new Storage())->entities(Comment::class, new CommentTable());
+        $comment = $comments->manageOne(['id' => 'c', 'article_id' => 'a', 'text' => 'Text']);
+
+        Assert::same($comments->manageOne(['id' => 'c', 'article_id' => 'a', 'text' => 'Text']), $comment);
     }
 
     public function findReturnsNullForMissingRow(): void

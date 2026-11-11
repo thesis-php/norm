@@ -46,11 +46,6 @@ final readonly class HookedTable implements Mapper, Writer, BeforeFlush
         return $this->table->entityToRow($entity);
     }
 
-    public function rowId(array $row): string
-    {
-        return $this->table->rowId($row);
-    }
-
     public function rowToEntity(array $row): object
     {
         return $this->table->rowToEntity($row);

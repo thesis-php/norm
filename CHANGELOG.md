@@ -13,6 +13,7 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 
 - Add `Thesis\Norm\Exception` marker interface implemented by every exception of the package.
 - Add `Mapper` and `Writer` interfaces: implement them (usually in one class) to convert entities to rows and to write rows to the storage.
+- Add optional `RowId` interface: implement it in a table to take the entity id right from a loaded row. Without it, `EntitySet::manageOne()` gets the id of a row by hydrating it.
 - Add `UnitOfWork::entities()` returning an `EntitySet` with `add()`, `remove()`, `manageOne()` and `manageAll()`. Repositories of one unit of work share the entity set of the same entity class.
 - Add `Exception\EntityAlreadyExists` to be thrown by `Writer::insert()` when the storage rejects a duplicate.
 - Add `UnitOfWork::$isClosed`.

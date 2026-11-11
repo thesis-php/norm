@@ -32,11 +32,6 @@ final readonly class CommentTable implements Mapper, Writer
         ];
     }
 
-    public function rowId(array $row): string
-    {
-        return $row['id'];
-    }
-
     public function rowToEntity(array $row): object
     {
         return new Comment(
