@@ -52,7 +52,6 @@ final class Identity
     public function __construct(
         public readonly UuidInterface $id,
         public private(set) string $passwordHash,
-        public readonly int $version,
     ) {}
 }
 ```
@@ -65,7 +64,6 @@ A **table** converts entities to rows and back ([`Mapper`](src/Mapper.php)) and 
  * @phpstan-type Row = array{
  *     id: non-empty-string,
  *     password_hash: non-empty-string,
- *     version: positive-int,
  * }
  * @implements Mapper<Identity, Row>
  * @implements Writer<PostgresLink, Row>
@@ -82,7 +80,6 @@ final readonly class IdentityTable implements Mapper, Writer
         return [
             'id' => $entity->id->toString(),
             'password_hash' => $entity->passwordHash,
-            'version' => $entity->version,
         ];
     }
 
@@ -91,7 +88,6 @@ final readonly class IdentityTable implements Mapper, Writer
         return new Identity(
             id: Uuid::fromString($row['id']),
             passwordHash: $row['password_hash'],
-            version: $row['version'],
         );
     }
 
@@ -102,7 +98,7 @@ final readonly class IdentityTable implements Mapper, Writer
 
     public function update(object $executor, array $changes): void
     {
-        // update identity ... where version = :before.version
+        // update identity ...
     }
 
     public function delete(object $executor, array $rows): void
@@ -137,7 +133,7 @@ final readonly class IdentityRepository
                 ->executor
                 ->execute(
                     <<<'SQL'
-                        select id, password_hash, version
+                        select id, password_hash
                         from identity
                         where id = ?
                         SQL,
@@ -153,6 +149,11 @@ final readonly class IdentityRepository
     }
 }
 ```
+
+A complete version of this entity, with the queries written out and an optimistic lock, is in
+[`examples/authentication`](examples/authentication): [`Identity`](examples/authentication/Identity.php),
+[`IdentityTable`](examples/authentication/IdentityTable.php) and
+[`IdentityRepository`](examples/authentication/IdentityRepository.php).
 
 A **unit of work** is one business transaction. Create it together with its repositories, change entities,
 flush once:
