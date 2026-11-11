@@ -28,8 +28,8 @@ final readonly class IdentityRepository
     public function find(UuidInterface $id): ?Identity
     {
         return $this->identities->find(
-            $id->toString(),
-            fn(): ?array => $this
+            id: $id->toString(),
+            load: fn(): ?array => $this
                 ->unitOfWork
                 ->executor
                 ->execute(
@@ -44,10 +44,6 @@ final readonly class IdentityRepository
         );
     }
 
-    /**
-     * Pessimistic lock: the row stays locked until the transaction of the unit of work ends.
-     * Goes through manageOne(), not find(), so that the query always runs and the lock is taken.
-     */
     public function lock(UuidInterface $id): ?Identity
     {
         return $this->identities->manageOne(

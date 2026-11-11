@@ -13,6 +13,12 @@ use Thesis\Norm\Mapper;
 use Thesis\Norm\Writer;
 
 /**
+ * The version for optimistic locking is a storage concern, so it is kept here rather than in Identity:
+ * rowToEntity() remembers the loaded version of each entity, entityToRow() puts it into the row,
+ * so that it gets into the snapshot and update() and delete() can check it against Change::$before.
+ * A WeakMap does not keep the entities alive, and the entities of different units of work are different objects,
+ * so one table may outlive a unit of work.
+ *
  * @phpstan-type Row = array{id: non-empty-string, password_hash: non-empty-string, version: positive-int}
  *
  * @implements Mapper<Identity, Row>
@@ -24,6 +30,17 @@ final readonly class IdentityTable implements Mapper, Writer
      * @see https://www.postgresql.org/docs/current/errcodes-appendix.html
      */
     private const string UNIQUE_VIOLATION = '23505';
+    private const int DEFAULT_VERSION = 1;
+
+    /**
+     * @var \WeakMap<Identity, positive-int>
+     */
+    private \WeakMap $versions;
+
+    public function __construct()
+    {
+        $this->versions = new \WeakMap();
+    }
 
     public function entityId(object $entity): string
     {
@@ -35,17 +52,20 @@ final readonly class IdentityTable implements Mapper, Writer
         return [
             'id' => $entity->id->toString(),
             'password_hash' => $entity->passwordHash,
-            'version' => $entity->version,
+            // a new identity is not in the map yet
+            'version' => $this->versions[$entity] ?? self::DEFAULT_VERSION,
         ];
     }
 
     public function rowToEntity(array $row): object
     {
-        return new Identity(
+        $identity = new Identity(
             id: Uuid::fromString($row['id']),
             passwordHash: $row['password_hash'],
-            version: $row['version'],
         );
+        $this->versions[$identity] = $row['version'];
+
+        return $identity;
     }
 
     public function insert(object $executor, array $rows): void

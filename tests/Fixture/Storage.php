@@ -16,6 +16,13 @@ final class Storage
     public array $articles = [];
 
     /**
+     * Versions of the articles written by {@see VersionedArticleTable}.
+     *
+     * @var array<non-empty-string, positive-int>
+     */
+    public array $articleVersions = [];
+
+    /**
      * Comments reference articles: a comment cannot be written without its article,
      * an article cannot be deleted while it has comments.
      *

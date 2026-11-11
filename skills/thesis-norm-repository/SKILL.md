@@ -64,6 +64,8 @@ public function rowToEntity(array $row): object
 - `entityToRow(rowToEntity($row))` must be lossless and stable.
 - Hydration has no side effects: no domain events, no validation that can fail on stored data.
 - Implement `RowId::rowId(array $row): string` when the id is in the row, to skip hydrating managed entities.
+- A mapper may keep per-entity state in a `WeakMap<TEntity, …>` (section 5): the snapshot is `entityToRow()`
+  of the very entity `rowToEntity()` returned.
 
 ## 3. Writer
 
@@ -179,6 +181,13 @@ The unit of work gets a transaction begun lazily (a lazy DI service or a PHP laz
 does not touch it, and the scope owner commits only a begun one. Selects via a pool are not one snapshot: if a
 decision depends on an aggregate that is not written, lock it or bump its version. Compare a client's version
 in the domain before the change.
+
+**Version out of the entity.** When the user wants the entity free of the version (a storage concern), keep it
+in the table: `rowToEntity()` stores `$row['version']` in a `\WeakMap<Entity, positive-int>` property set
+in the constructor, `entityToRow()` returns `$this->versions[$entity] ?? 1` (a new entity is not in the map),
+`update()`/`delete()` are unchanged. One table may serve many units of work. A client's version or a bump of an
+unchanged aggregate then go through the repository (`version()`, `touch()` reading or incrementing the map),
+not the domain. Example: `vendor/thesis/norm/examples/authentication/IdentityTable.php`.
 
 **Pessimistic: lock the row until commit.**
 

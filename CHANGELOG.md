@@ -19,9 +19,8 @@ The abstract `Repository` is split into composable parts: a table converts and w
 - Add `BeforeFlush` interface: implement it in a table to act on every managed entity right before `UnitOfWork::flush()` collects changes (release events into an outbox, cascade removals, touch `updatedAt`). The hook receives the entity and its `EntityState` (`New`, `Unchanged`, `Changed`, `Removed`) and may change, add, remove and load entities of any entity set. Entities cannot be changed while the changes are being written.
 - Add `Change` passed to `Writer::update()` with the row as loaded (`before`) and as it is now (`after`).
 - Add named constructors to `DuplicateEntity`, `EntityNotManaged`, `UnitOfWorkClosed` and `DependencyCycle`: their messages name the entity class and id, and `DependencyCycle` names the classes of the cycle.
-- Guarantee that `UnitOfWork::flush()` without changes does not touch the executor, so a lazily begun transaction is not begun at all. README and the `thesis-norm-repository` skill describe optimistic locking with reads via a pool and a short, lazily begun transaction, and pessimistic locking with `for update` finders via `EntitySet::manageOne()`.
+- Guarantee that `UnitOfWork::flush()` without changes does not touch the executor, so a lazily begun transaction is not begun at all.
 - Add `thesis-norm-repository` AI skill (`skills/thesis-norm-repository/SKILL.md`) describing how to write tables and repositories, distributed with the package and synced by [`llm/skills`](https://github.com/roxblnfk/skills).
-- Document NORM in README: the contract, guarantees, locking and exceptions.
 
 ### Changed
 

@@ -219,6 +219,8 @@ and do not share it between fibers.
 - `entityToRow()` and `rowToEntity()` must be mutually inverse: change detection compares `entityToRow()` results.
 - **Rows contain only scalars, nulls and arrays of them.** Rows are compared with `!==`, which compares objects
   by reference: a `DateTimeImmutable` in a row makes the entity look changed on every flush. Format such values.
+- A mapper may keep state of its own per entity in a `WeakMap`: the snapshot is taken via `entityToRow()`
+  of the very entity `rowToEntity()` returned. See [Keeping the version out of the entity](#keeping-the-version-out-of-the-entity).
 
 ### `Writer<TExecutor, TRow>`
 
@@ -314,7 +316,8 @@ final readonly class IdentityRepository
   protects only the rows that are written; if a decision depends on an aggregate that is not changed, lock it
   or bump its version too.
 - A version that comes from the client (a form field, `If-Match`) is compared by the domain before changing
-  the entity; the writer then checks the loaded one.
+  the entity; the writer then checks the loaded one. If the entity does not keep the version, see
+  [Keeping the version out of the entity](#keeping-the-version-out-of-the-entity).
 
 ### Pessimistic: lock for the whole business transaction
 
@@ -340,6 +343,55 @@ public function lock(UuidInterface $id): ?Identity
   still catches a concurrent change. Lock an aggregate before any other load of it in the unit of work.
 - Deadlocks (SQLSTATE `40P01`) and `lock_not_available` (`55P03`, with `nowait` or `lock_timeout`) are thrown by your
   driver, not by NORM: retry the whole transaction, like on `ConcurrentModification`. For queues use `skip locked`.
+
+### Keeping the version out of the entity
+
+The version is a storage concern, the entity does not need it. The table may keep it instead: `rowToEntity()`
+remembers the loaded version in a `WeakMap` keyed by the entity, `entityToRow()` puts it into the row, so it gets
+into the snapshot and the writer checks `$change->before['version']` as usual:
+
+```php
+final readonly class IdentityTable implements Mapper, Writer
+{
+    private const int DEFAULT_VERSION = 1;
+
+    /** @var \WeakMap<Identity, positive-int> */
+    private \WeakMap $versions;
+
+    public function __construct()
+    {
+        $this->versions = new \WeakMap();
+    }
+
+    public function entityToRow(object $entity): array
+    {
+        return [
+            'id' => $entity->id->toString(),
+            'password_hash' => $entity->passwordHash,
+            // a new entity is not in the map yet
+            'version' => $this->versions[$entity] ?? self::DEFAULT_VERSION,
+        ];
+    }
+
+    public function rowToEntity(array $row): object
+    {
+        $identity = new Identity(id: Uuid::fromString($row['id']), passwordHash: $row['password_hash']);
+        $this->versions[$identity] = $row['version'];
+
+        return $identity;
+    }
+
+    // entityId(), insert(), update() and delete() are the same
+}
+```
+
+- A `WeakMap` does not keep entities alive, and every unit of work hydrates its own entities, so one table instance
+  may serve many units of work.
+- A row of an already managed entity is ignored by `manageOne()`, so its version does not replace the loaded one.
+- The domain cannot compare a client's version (`If-Match`) or bump the version of an unchanged aggregate itself:
+  expose the version or a `touch()` from the repository, which reads or increments the one in the map.
+
+[`examples/authentication`](examples/authentication) keeps the version this way.
 
 ## Writing is not reading for display
 

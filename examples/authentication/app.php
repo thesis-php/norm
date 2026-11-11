@@ -8,6 +8,7 @@ use Amp\Postgres\PostgresConfig;
 use Amp\Postgres\PostgresConnectionPool;
 use Amp\Postgres\PostgresQueryError;
 use Ramsey\Uuid\Uuid;
+use Thesis\Norm\Exception\ConcurrentModification;
 use Thesis\Norm\Exception\EntityAlreadyExists;
 use Thesis\Norm\UnitOfWork;
 use function Amp\async;
@@ -66,6 +67,25 @@ async(static function () use ($postgres): void {
         $identity->changePassword($password, $newPassword);
     });
 
+    // optimistic lock: a concurrent transaction changes the password between our read and our write,
+    // our update checks the version loaded by our read and affects no row
+    try {
+        $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($transactor, $id, $newPassword): void {
+            $identity = new IdentityRepository($unitOfWork)->find($id) ?? throw new \Exception('Not registered');
+
+            $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($id, $newPassword): void {
+                $identity = new IdentityRepository($unitOfWork)->find($id) ?? throw new \Exception('Not registered');
+                $identity->changePassword($newPassword, $newPassword);
+            });
+
+            $identity->changePassword($newPassword, $newPassword);
+        });
+
+        throw new \LogicException('Expected ConcurrentModification');
+    } catch (ConcurrentModification) {
+        // the transaction is rolled back, retry the whole transaction to apply the change
+    }
+
     // change the password back under a pessimistic lock: other transactions cannot lock the row until commit
     $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($postgres, $id, $password, $newPassword): void {
         $identity = new IdentityRepository($unitOfWork)->lock($id) ?? throw new \Exception('Not registered');
@@ -89,5 +109,5 @@ async(static function () use ($postgres): void {
         $identity->authenticate($password);
     });
 
-    echo "Registered, changed the password twice, the second time under a lock, and authenticated {$id}\n";
+    echo "Registered, changed the password, lost a concurrent change, changed it back under a lock and authenticated {$id}\n";
 })->await();

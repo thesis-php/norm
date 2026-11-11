@@ -15,6 +15,11 @@ namespace Thesis\Norm;
  * which compares objects by reference: an object in a row (a date, a value object) would make
  * the entity look changed on every flush. Convert such values to scalars, e.g. dates to strings.
  *
+ * A mapper may keep state of its own per entity, e.g. the version of an optimistic lock that is a storage concern
+ * rather than a part of the entity: remember it in a WeakMap keyed by the entity in rowToEntity() and put it into
+ * the row in entityToRow(). The snapshot is taken via entityToRow() of the very entity rowToEntity() returned,
+ * so the version reaches {@see Change::$before} and {@see Writer::delete()}.
+ *
  * @api
  *
  * @template TEntity of object
