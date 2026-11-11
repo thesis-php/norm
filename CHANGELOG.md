@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] 2026-10-29
+## [Unreleased]
 
 The library is rethought as NORM (Not An ORM): a minimal unit of work on top of hand-written repositories, with no mapping or query layer.
 
@@ -21,11 +21,11 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 - Add `EntitySet::find()` for finders by id: it returns an entity passed to `add()` or already loaded without querying the storage and `null` for a removed entity, otherwise it loads and registers the row. Finders by other criteria keep reflecting the storage.
 - Add `BeforeFlush` interface: implement it in a table to act on every managed entity right before `UnitOfWork::flush()` collects changes (release events into an outbox, cascade removals, touch `updatedAt`). The hook receives the entity and its `EntityState` (`New`, `Unchanged`, `Changed`, `Removed`) and may change, add, remove and load entities of any entity set. Entities cannot be changed while the changes are being written.
 - Add named constructors to `DuplicateEntity`, `EntityNotManaged`, `UnitOfWorkClosed` and `DependencyCycle`: their messages name the entity class and id, and `DependencyCycle` names the classes of the cycle.
-- Accessing `UnitOfWork::$executor` after `flush()` or `close()` throws `UnitOfWorkClosed`, so finders do not query on behalf of a closed unit of work.
-- Unchanged entities are no longer passed to `update()`: changes are detected by comparing the result of `entityToRow()` with its result right after loading, so storage-specific representations (date formats, scalar types, extra columns) do not cause spurious updates.
 
 ### Changed
 
+- **BC Break:** Accessing `UnitOfWork::$executor` after `flush()` or `close()` throws `UnitOfWorkClosed`, so finders do not query on behalf of a closed unit of work.
+- Unchanged entities are no longer passed to `update()`: changes are detected by comparing the result of `entityToRow()` with its result right after loading, so storage-specific representations (date formats, scalar types, extra columns) do not cause spurious updates.
 - **BC Break:** The package is renamed from `thesis/orm` to `thesis/norm`, the namespace from `Thesis\ORM` to `Thesis\Norm`.
 - **BC Break:** `Repository` is removed. Write your own repository class on top of `UnitOfWork::entities()` and add the finders you need, registering loaded rows via `EntitySet::manageOne()`/`manageAll()`.
 - **BC Break:** `UnitOfWork::repository()`, `Repository::findBy()` and `Repository::key()` are removed.
@@ -54,8 +54,11 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 ### Changed
 
 - **BC Break:** `Thesis\ORM\Transaction` moved to `Thesis\Transaction` in a separate [thesis/transaction](https://github.com/thesis-php/transaction) package.
-- **BC Break:** Flip order of Flip `$class` and `$persister` parameters in `Repository::__construct()` and `UnitOfWork::repository()`.
+- **BC Break:** Flip order of `$class` and `$persister` parameters in `Repository::__construct()` and `UnitOfWork::repository()`.
 
 ### Fixed
 
 - `UnitOfWork` is now always closed.
+
+[Unreleased]: https://github.com/thesis-php/orm/compare/0.2.0...HEAD
+[0.2.0]: https://github.com/thesis-php/orm/compare/0.1.0...0.2.0
