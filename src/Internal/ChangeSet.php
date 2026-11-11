@@ -45,12 +45,7 @@ final class ChangeSet
     {
         $row = ($this->entityToRow)($entity);
 
-        $sortedRow = $row;
-        ksort($sortedRow);
-
-        ksort($snapshot);
-
-        if ($sortedRow !== $snapshot) {
+        if ($row !== $snapshot) {
             $this->updates[] = $row;
         }
     }

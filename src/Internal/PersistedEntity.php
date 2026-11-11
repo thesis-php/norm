@@ -21,11 +21,11 @@ final class PersistedEntity
 
     /**
      * @param TEntity $entity
-     * @param TRow $row
+     * @param TRow $snapshot entityToRow() result taken right after loading
      */
     public function __construct(
         public readonly object $entity,
-        private readonly array $row,
+        private readonly array $snapshot,
     ) {}
 
     /**
@@ -60,11 +60,11 @@ final class PersistedEntity
     public function collectChanges(ChangeSet $changeSet): void
     {
         if ($this->removed) {
-            $changeSet->delete($this->row);
+            $changeSet->delete($this->snapshot);
 
             return;
         }
 
-        $changeSet->update($this->entity, $this->row);
+        $changeSet->update($this->entity, $this->snapshot);
     }
 }

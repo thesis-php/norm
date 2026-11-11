@@ -9,7 +9,7 @@ use Thesis\Norm\Exception\EntityAlreadyExists;
 use Thesis\Norm\Repository;
 
 /**
- * @phpstan-type Row = array{id: non-empty-string, title: string}
+ * @phpstan-type Row = array{id: non-empty-string, title: string, published_at: ?string}
  *
  * @extends Repository<Storage, Article, Row>
  */
@@ -38,7 +38,11 @@ final class ArticleRepository extends Repository
 
     protected function entityToRow(object $entity): array
     {
-        return ['title' => $entity->title, 'id' => $entity->id];
+        return [
+            'title' => $entity->title,
+            'id' => $entity->id,
+            'published_at' => $entity->publishedAt?->format('Y-m-d H:i:sP'),
+        ];
     }
 
     protected function rowId(array $row): string
@@ -48,7 +52,11 @@ final class ArticleRepository extends Repository
 
     protected function rowToEntity(array $row): object
     {
-        return new Article($row['id'], $row['title']);
+        return new Article(
+            id: $row['id'],
+            title: $row['title'],
+            publishedAt: $row['published_at'] === null ? null : new \DateTimeImmutable($row['published_at']),
+        );
     }
 
     protected function insert(array $rows): void

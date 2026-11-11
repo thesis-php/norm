@@ -12,5 +12,6 @@ final class Article
     public function __construct(
         public readonly string $id,
         public string $title,
+        public ?\DateTimeImmutable $publishedAt = null,
     ) {}
 }

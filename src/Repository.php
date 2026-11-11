@@ -69,7 +69,9 @@ abstract class Repository
         }
 
         $entity = $this->rowToEntity($row);
-        $this->entities[$id] = new PersistedEntity($entity, $row);
+        // The snapshot is taken via entityToRow() rather than from the raw row, so that storage-specific
+        // representations (date formats, scalar types, extra columns) do not make the entity look changed.
+        $this->entities[$id] = new PersistedEntity($entity, $this->entityToRow($entity));
 
         return $entity;
     }
@@ -160,7 +162,7 @@ abstract class Repository
     abstract protected function update(array $rows): void;
 
     /**
-     * @param non-empty-list<TRow> $rows
+     * @param non-empty-list<TRow> $rows entityToRow() snapshots taken when the entities were loaded
      * @throws ConcurrentModification
      */
     abstract protected function delete(array $rows): void;

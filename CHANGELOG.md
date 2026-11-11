@@ -15,7 +15,7 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 - Add `Exception\EntityAlreadyExists` to be thrown by `Repository::insert()` when the storage rejects a duplicate.
 - Add `UnitOfWork::onFlush()` and `UnitOfWork::$isClosed`.
 - Add `Repository::manageOne()` and `Repository::manageAll()` to register loaded rows in the unit of work.
-- Unchanged entities are no longer passed to `update()`: changes are detected by comparing the result of `entityToRow()` with the loaded row.
+- Unchanged entities are no longer passed to `update()`: changes are detected by comparing the result of `entityToRow()` with its result right after loading, so storage-specific representations (date formats, scalar types, extra columns) do not cause spurious updates.
 
 ### Changed
 

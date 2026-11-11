@@ -30,7 +30,7 @@ final readonly class RepositoryTest
 
         $unitOfWork->flush();
 
-        Assert::same($storage->log, [['insert', [['title' => 'Title', 'id' => 'a']]]]);
+        Assert::same($storage->log, [['insert', [['title' => 'Title', 'id' => 'a', 'published_at' => null]]]]);
     }
 
     public function findReturnsSameInstance(): void
@@ -60,6 +60,19 @@ final readonly class RepositoryTest
         Assert::same($storage->log, []);
     }
 
+    public function unchangedEntityIsNotUpdatedWhenStorageFormatDiffers(): void
+    {
+        $storage = new Storage();
+        $storage->rows['a'] = ['id' => 'a', 'title' => 'Title', 'published_at' => '2026-01-01 00:00:00+00'];
+        $unitOfWork = new UnitOfWork($storage);
+        $repository = new ArticleRepository($unitOfWork);
+
+        $repository->find('a');
+        $unitOfWork->flush();
+
+        Assert::same($storage->log, []);
+    }
+
     public function changedEntityIsUpdated(): void
     {
         $storage = self::storageWithArticle();
@@ -71,7 +84,7 @@ final readonly class RepositoryTest
         $article->title = 'New';
         $unitOfWork->flush();
 
-        Assert::same($storage->log, [['update', [['title' => 'New', 'id' => 'a']]]]);
+        Assert::same($storage->log, [['update', [['title' => 'New', 'id' => 'a', 'published_at' => null]]]]);
     }
 
     public function removedEntityIsDeleted(): void
@@ -199,7 +212,7 @@ final readonly class RepositoryTest
     private static function storageWithArticle(): Storage
     {
         $storage = new Storage();
-        $storage->rows['a'] = ['id' => 'a', 'title' => 'Title'];
+        $storage->rows['a'] = ['id' => 'a', 'title' => 'Title', 'published_at' => null];
 
         return $storage;
     }
