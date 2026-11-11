@@ -60,7 +60,11 @@ async(static function () use ($postgres): void {
         $identity->changePassword($password, $newPassword);
     });
 
-    // find all
-    dump(new IdentityRepository(new UnitOfWork($postgres))->findAll());
+    // authenticate: the identity is loaded for reading only, nothing is written
+    $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($id, $newPassword): void {
+        $identity = new IdentityRepository($unitOfWork)->find($id) ?? throw new \Exception('Not registered');
+        $identity->authenticate($newPassword);
+    });
 
+    echo "Registered, changed the password and authenticated {$id}\n";
 })->await();

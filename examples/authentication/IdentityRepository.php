@@ -44,21 +44,6 @@ final readonly class IdentityRepository
         );
     }
 
-    /**
-     * @return list<Identity>
-     */
-    public function findAll(): array
-    {
-        return $this->identities->manageAll(
-            $this->unitOfWork->executor->query(
-                <<<'SQL'
-                    select id, password_hash, version
-                    from identity
-                    SQL,
-            ),
-        );
-    }
-
     public function add(Identity $identity): void
     {
         $this->identities->add($identity);
