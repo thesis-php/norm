@@ -221,9 +221,15 @@ try {
 } finally {
     $unitOfWork->close();
 
-    // inactive after commit() or when the connection is lost: rollback() would replace the original exception
+    // Still active only when an exception propagates before commit(): commit() (even a failed one)
+    // and a lost connection end the transaction, rollback() would throw then.
     if ($transaction->isActive()) {
-        $transaction->rollback();
+        try {
+            $transaction->rollback();
+        } catch (\Amp\Sql\SqlException) {
+            // ROLLBACK fails only when the connection is lost, Postgres rolls back then:
+            // keep the original exception.
+        }
     }
 }
 ```

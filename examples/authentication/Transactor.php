@@ -6,6 +6,7 @@ namespace Authentication;
 
 use Amp\Postgres\PostgresLink;
 use Amp\Postgres\PostgresTransaction;
+use Amp\Sql\SqlException;
 use Thesis\Norm\UnitOfWork;
 
 /**
@@ -37,14 +38,14 @@ final readonly class Transactor
         } finally {
             $unitOfWork->close();
 
-            // Inactive after commit() (even a failed one) or when the connection is lost:
-            // rollback() would throw then and replace the original exception.
+            // Still active only when an exception propagates before commit(): commit() (even a failed one)
+            // and a lost connection end the transaction, rollback() would throw then.
             if ($transaction->isActive()) {
                 try {
                     $transaction->rollback();
-                } catch (\Throwable) {
-                    // Active here only while an exception propagates: it matters more than a failed rollback.
-                    // Postgres rolls back on disconnect, amphp retries in the transaction's destructor.
+                } catch (SqlException) { // @phpstan-ignore catch.neverThrown (amphp does not declare SqlException of the ROLLBACK query)
+                    // ROLLBACK fails only when the connection is lost, Postgres rolls back then:
+                    // keep the original exception.
                 }
             }
         }
