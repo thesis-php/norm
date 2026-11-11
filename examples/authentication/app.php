@@ -32,27 +32,21 @@ $postgres->query(
 );
 
 async(static function () use ($postgres): void {
+    $transactor = new Transactor($postgres);
     $id = Uuid::uuid7();
     $password = bin2hex(random_bytes(16));
     $newPassword = bin2hex(random_bytes(16));
 
     // register
-    $transaction = $postgres->beginTransaction();
-    $unitOfWork = new UnitOfWork($transaction);
-    $repository = new IdentityRepository($unitOfWork);
-    $identity = Identity::register($id, $password);
-    $repository->add($identity);
-    $unitOfWork->flush();
-    $transaction->commit();
+    $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($id, $password): void {
+        new IdentityRepository($unitOfWork)->add(Identity::register($id, $password));
+    });
 
     // change password
-    $transaction = $postgres->beginTransaction();
-    $unitOfWork = new UnitOfWork($transaction);
-    $repository = new IdentityRepository($unitOfWork);
-    $identity = $repository->find($id) ?? throw new \Exception('Not registered');
-    $identity->changePassword($password, $newPassword);
-    $unitOfWork->flush();
-    $transaction->commit();
+    $transactor->transactional(static function (UnitOfWork $unitOfWork) use ($id, $password, $newPassword): void {
+        $identity = new IdentityRepository($unitOfWork)->find($id) ?? throw new \Exception('Not registered');
+        $identity->changePassword($password, $newPassword);
+    });
 
     // find all
     dump(new IdentityRepository(new UnitOfWork($postgres))->findAll());
