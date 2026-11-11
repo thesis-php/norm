@@ -181,7 +181,8 @@ Wrap this lifecycle in a helper once — see [`Transactor`](examples/authenticat
 
 ### `UnitOfWork<TExecutor>`
 
-- `new UnitOfWork($executor)` — `$executor` is whatever runs your queries: a transaction, a connection or a pool.
+- `new UnitOfWork($executor)` — `$executor` is whatever runs your queries, normally a transaction: `flush()` is
+  atomic only within one, see [Guarantees](#guarantees). A connection or a pool fits a unit of work that only reads.
   It is available as `$unitOfWork->executor` and is passed to every `Writer` call.
 - `entities(class-string $class, Mapper&Writer $table): EntitySet` — the entity set of the class. Every call with
   the same class returns the same set, so all repositories of one unit of work share one identity map per class.
@@ -244,6 +245,11 @@ Throw `ConcurrentModification` when an update or a delete affects no row.
   and updates go in the dependency order of entity sets (`DependsOn`), deletes in the reverse one; independent
   entity sets keep the order of registration. A dependency cycle throws `DependencyCycle` before anything is
   written. Rows within one batch are ordered by the writer.
+- **Atomicity — only via a transaction.** The unit of work neither begins nor commits transactions, it just passes
+  its executor to every `Writer` call. If the executor is a transaction, commit it after `flush()` and roll it back
+  on failure, and the flush is all or nothing. With a connection in autocommit mode or a pool, a failed write
+  (e.g. `ConcurrentModification` on update) leaves the earlier writes in the storage, and the closed unit of work
+  cannot retry the rest.
 - **Closing.** The unit of work is closed once the changes are collected, so entities cannot be changed while
   they are being written. After `flush()` — successful or not — or `close()`, `flush()`, `entities()`, `$executor`
   and every entity set throw `UnitOfWorkClosed`, so finders do not query on behalf of a finished business transaction.

@@ -212,6 +212,8 @@ try {
 }
 ```
 
+Pass a transaction as the executor of a unit of work that writes: `flush()` does not begin or commit one, so with
+a connection in autocommit mode or a pool a failed write leaves the earlier ones in the storage.
 After `flush()` (successful or not) or `close()` the unit of work cannot be reused. Never share one between fibers.
 `EntityAlreadyExists` and `ConcurrentModification` are worth retrying the whole transaction;
 `DuplicateEntity`, `EntityNotManaged`, `UnitOfWorkClosed`, `DependencyCycle` are bugs.

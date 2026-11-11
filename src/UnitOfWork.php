@@ -18,7 +18,7 @@ use Thesis\Norm\Internal\Tables;
  *
  * @api
  *
- * @template-covariant TExecutor of object whatever runs the queries: a transaction, a connection or a pool
+ * @template-covariant TExecutor of object whatever runs the queries, normally a transaction: see flush() on atomicity
  */
 final class UnitOfWork
 {
@@ -98,6 +98,11 @@ final class UnitOfWork
      *
      * The unit of work is closed once the changes are collected, so the entities cannot be changed while
      * they are being written. It stays closed afterwards, whether the flush succeeded or not.
+     *
+     * The unit of work neither begins nor commits transactions, so the writes are atomic only if the executor
+     * is a transaction: commit it after flush() and roll it back on failure. With a connection in autocommit mode
+     * or a pool, a failed write (e.g. ConcurrentModification on update) leaves the earlier writes in the storage.
+     * Pass those only to a unit of work that does not write or when a partial write is acceptable.
      *
      * @throws DependencyCycle if the entity sets depend on each other in a cycle
      * @throws UnitOfWorkClosed
