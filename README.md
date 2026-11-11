@@ -25,7 +25,8 @@ flush order — the rest is plain code:
 - **Nothing is hidden.** Mapping, queries and writes are PHP an agent reads and debugs like any other code.
 - **SQL made for the entity.** Use everything your database offers (`json_agg`, `jsonb`, `unnest`, `skip locked`),
   not the subset an ORM supports.
-- **Small contract.** Two classes, two interfaces and a ready [`norm-repository`](skills/norm-repository/SKILL.md) skill.
+- **Small contract.** Two classes and two interfaces at the core, three optional table interfaces
+  and a ready [`norm-repository`](skills/norm-repository/SKILL.md) skill.
 - **Checked by tools.** PHPStan generics tie rows, mappers and writers together; misuse throws a dedicated exception.
 - **Every table looks the same.** One is a template for the next.
 

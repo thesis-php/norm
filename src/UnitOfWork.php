@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Thesis\Norm;
 
+use Thesis\Norm\Exception\ConcurrentModification;
 use Thesis\Norm\Exception\DependencyCycle;
+use Thesis\Norm\Exception\EntityAlreadyExists;
 use Thesis\Norm\Exception\UnitOfWorkClosed;
 use Thesis\Norm\Internal\Table;
 use Thesis\Norm\Internal\Tables;
@@ -108,7 +110,9 @@ final class UnitOfWork
      * the executor is not touched, so a lazily begun transaction (e.g. a lazy service of a DI container) is not
      * begun at all, unless a BeforeFlush hook or a finder uses it.
      *
+     * @throws ConcurrentModification if a writer detects a concurrent update or delete, retry the whole transaction
      * @throws DependencyCycle if the entity sets depend on each other in a cycle
+     * @throws EntityAlreadyExists if a writer reports a duplicate insert, retry the whole transaction
      * @throws UnitOfWorkClosed
      */
     public function flush(): void
