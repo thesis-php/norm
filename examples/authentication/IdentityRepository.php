@@ -27,8 +27,9 @@ final readonly class IdentityRepository
 
     public function find(UuidInterface $id): ?Identity
     {
-        return $this->identities->manageOne(
-            $this
+        return $this->identities->find(
+            $id->toString(),
+            fn(): ?array => $this
                 ->unitOfWork
                 ->transaction
                 ->execute(

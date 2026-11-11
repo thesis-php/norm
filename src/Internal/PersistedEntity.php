@@ -18,7 +18,7 @@ use Thesis\Norm\Exception\EntityNotManaged;
  */
 final class PersistedEntity
 {
-    private bool $removed = false;
+    public private(set) bool $isRemoved = false;
 
     /**
      * @param TEntity $entity
@@ -39,7 +39,7 @@ final class PersistedEntity
             throw new DuplicateEntity();
         }
 
-        $this->removed = false;
+        $this->isRemoved = false;
     }
 
     /**
@@ -52,7 +52,7 @@ final class PersistedEntity
             throw new EntityNotManaged();
         }
 
-        $this->removed = true;
+        $this->isRemoved = true;
     }
 
     /**
@@ -65,7 +65,7 @@ final class PersistedEntity
             return null;
         }
 
-        if ($this->removed) {
+        if ($this->isRemoved) {
             return EntityState::Removed;
         }
 
@@ -77,7 +77,7 @@ final class PersistedEntity
      */
     public function collectChanges(ChangeSet $changeSet): void
     {
-        if ($this->removed) {
+        if ($this->isRemoved) {
             $changeSet->delete($this->snapshot);
 
             return;

@@ -13,11 +13,14 @@ use Thesis\Norm\Exception\EntityNotManaged;
 use Thesis\Norm\Exception\UnitOfWorkClosed;
 use Thesis\Norm\Fixture\Article;
 use Thesis\Norm\Fixture\ArticleRepository;
+use Thesis\Norm\Fixture\ArticleTable;
 use Thesis\Norm\Fixture\Storage;
 
 #[Test]
 final readonly class RepositoryTest
 {
+    private const array ARTICLE = ['id' => 'a', 'title' => 'Title', 'published_at' => null];
+
     public function addInsertsOnFlush(): void
     {
         $storage = new Storage();
@@ -49,6 +52,56 @@ final readonly class RepositoryTest
             new ArticleRepository($unitOfWork)->find('a'),
             new ArticleRepository($unitOfWork)->find('a'),
         );
+    }
+
+    public function findReturnsAddedEntity(): void
+    {
+        $repository = new ArticleRepository(new UnitOfWork(new Storage()));
+        $article = new Article('a', 'Title');
+
+        $repository->add($article);
+
+        Assert::same($repository->find('a'), $article);
+    }
+
+    public function findReturnsNullForRemovedEntity(): void
+    {
+        $repository = new ArticleRepository(new UnitOfWork(self::storageWithArticle()));
+        $article = $repository->find('a');
+        Assert::notNull($article);
+
+        $repository->remove($article);
+
+        Assert::null($repository->find('a'));
+    }
+
+    public function findReturnsEntityRemovedAndAddedBack(): void
+    {
+        $repository = new ArticleRepository(new UnitOfWork(self::storageWithArticle()));
+        $article = $repository->find('a');
+        Assert::notNull($article);
+
+        $repository->remove($article);
+        $repository->add($article);
+
+        Assert::same($repository->find('a'), $article);
+    }
+
+    public function findDoesNotLoadManagedEntity(): void
+    {
+        $articles = new UnitOfWork(new Storage())->entities(Article::class, new ArticleTable());
+        $article = $articles->manageOne(self::ARTICLE);
+
+        Assert::same($articles->find('a', static fn(): never => throw new \LogicException('Must not load')), $article);
+    }
+
+    public function findLoadsUnmanagedEntity(): void
+    {
+        $articles = new UnitOfWork(new Storage())->entities(Article::class, new ArticleTable());
+
+        $article = $articles->find('a', static fn(): array => self::ARTICLE);
+
+        Assert::same($articles->manageOne(self::ARTICLE), $article);
     }
 
     public function findReturnsNullForMissingRow(): void
@@ -261,7 +314,7 @@ final readonly class RepositoryTest
     private static function storageWithArticle(): Storage
     {
         $storage = new Storage();
-        $storage->articles['a'] = ['id' => 'a', 'title' => 'Title', 'published_at' => null];
+        $storage->articles['a'] = self::ARTICLE;
 
         return $storage;
     }

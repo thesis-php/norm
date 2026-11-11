@@ -38,7 +38,37 @@ final class EntitySet
     ) {}
 
     /**
+     * Returns the entity with the given id as this unit of work sees it: an entity passed to add()
+     * or already loaded is returned without calling $load, a removed one gives null. Otherwise the row
+     * returned by $load is registered via manageOne(). Use it in finders by id, so that they see
+     * the pending changes, unlike finders by other criteria, which reflect the storage.
+     *
+     * @param non-empty-string $id
+     * @param \Closure(): ?array<mixed> $load loads the row with the given id from the storage
+     * @return ?TEntity
+     * @throws DuplicateEntity
+     * @throws UnitOfWorkClosed
+     */
+    public function find(string $id, \Closure $load): ?object
+    {
+        $this->ensureNotClosed();
+
+        $managed = $this->entities[$id] ?? null;
+
+        if ($managed instanceof PersistedEntity) {
+            return $managed->isRemoved ? null : $managed->entity;
+        }
+
+        if ($managed?->entity !== null) {
+            return $managed->entity;
+        }
+
+        return $this->manageOne($load());
+    }
+
+    /**
      * Registers a row loaded from the storage and returns its entity.
+     * Rows of removed entities still give their entities: finders by criteria reflect the storage.
      * If the entity is already managed, the same instance is returned and the row is ignored.
      * The row must match the mapper's row type: it is passed to the mapper as is.
      *
