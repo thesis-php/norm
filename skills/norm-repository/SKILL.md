@@ -218,10 +218,13 @@ try {
     $result = $work($unitOfWork);
     $unitOfWork->flush();
     $transaction->commit();
-} catch (\Throwable $exception) {
+} finally {
     $unitOfWork->close();
-    $transaction->rollback();
-    throw $exception;
+
+    // inactive after commit() or when the connection is lost: rollback() would replace the original exception
+    if ($transaction->isActive()) {
+        $transaction->rollback();
+    }
 }
 ```
 

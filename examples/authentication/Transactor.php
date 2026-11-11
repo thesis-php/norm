@@ -34,14 +34,19 @@ final readonly class Transactor
             $transaction->commit();
 
             return $result;
-        } catch (\Throwable $exception) {
+        } finally {
             $unitOfWork->close();
 
+            // Inactive after commit() (even a failed one) or when the connection is lost:
+            // rollback() would throw then and replace the original exception.
             if ($transaction->isActive()) {
-                $transaction->rollback();
+                try {
+                    $transaction->rollback();
+                } catch (\Throwable) {
+                    // Active here only while an exception propagates: it matters more than a failed rollback.
+                    // Postgres rolls back on disconnect, amphp retries in the transaction's destructor.
+                }
             }
-
-            throw $exception;
         }
     }
 }
