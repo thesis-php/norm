@@ -129,11 +129,9 @@ final class EntitySet
     /**
      * @internal
      *
-     * @template Tx of object
-     * @param Writer<Tx, array<mixed>> $writer
-     * @param Tx $transaction
+     * @return ChangeSet<TEntity, array<mixed>>
      */
-    public function flush(Writer $writer, object $transaction): void
+    public function changes(): ChangeSet
     {
         $changeSet = new ChangeSet($this->mapper->entityToRow(...));
 
@@ -141,17 +139,7 @@ final class EntitySet
             $entity->collectChanges($changeSet);
         }
 
-        if ($changeSet->inserts !== []) {
-            $writer->insert($transaction, $changeSet->inserts);
-        }
-
-        if ($changeSet->updates !== []) {
-            $writer->update($transaction, $changeSet->updates);
-        }
-
-        if ($changeSet->deletes !== []) {
-            $writer->delete($transaction, $changeSet->deletes);
-        }
+        return $changeSet;
     }
 
     /**

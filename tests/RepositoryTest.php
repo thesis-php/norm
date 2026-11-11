@@ -26,11 +26,11 @@ final readonly class RepositoryTest
 
         $repository->add(new Article('a', 'Title'));
 
-        Assert::same($storage->rows, []);
+        Assert::same($storage->articles, []);
 
         $unitOfWork->flush();
 
-        Assert::same($storage->log, [['insert', [['title' => 'Title', 'id' => 'a', 'published_at' => null]]]]);
+        Assert::same($storage->log, [['insert', 'articles', [['title' => 'Title', 'id' => 'a', 'published_at' => null]]]]);
     }
 
     public function findReturnsSameInstance(): void
@@ -73,7 +73,7 @@ final readonly class RepositoryTest
     public function unchangedEntityIsNotUpdatedWhenStorageFormatDiffers(): void
     {
         $storage = new Storage();
-        $storage->rows['a'] = ['id' => 'a', 'title' => 'Title', 'published_at' => '2026-01-01 00:00:00+00'];
+        $storage->articles['a'] = ['id' => 'a', 'title' => 'Title', 'published_at' => '2026-01-01 00:00:00+00'];
         $unitOfWork = new UnitOfWork($storage);
         $repository = new ArticleRepository($unitOfWork);
 
@@ -94,7 +94,7 @@ final readonly class RepositoryTest
         $article->title = 'New';
         $unitOfWork->flush();
 
-        Assert::same($storage->log, [['update', [['title' => 'New', 'id' => 'a', 'published_at' => null]]]]);
+        Assert::same($storage->log, [['update', 'articles', [['title' => 'New', 'id' => 'a', 'published_at' => null]]]]);
     }
 
     public function removedEntityIsDeleted(): void
@@ -108,7 +108,7 @@ final readonly class RepositoryTest
         $repository->remove($article);
         $unitOfWork->flush();
 
-        Assert::same($storage->rows, []);
+        Assert::same($storage->articles, []);
     }
 
     public function removedThenAddedEntityIsKept(): void
@@ -240,7 +240,7 @@ final readonly class RepositoryTest
     private static function storageWithArticle(): Storage
     {
         $storage = new Storage();
-        $storage->rows['a'] = ['id' => 'a', 'title' => 'Title', 'published_at' => null];
+        $storage->articles['a'] = ['id' => 'a', 'title' => 'Title', 'published_at' => null];
 
         return $storage;
     }

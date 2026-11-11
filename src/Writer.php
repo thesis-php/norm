@@ -8,7 +8,8 @@ use Thesis\Norm\Exception\ConcurrentModification;
 use Thesis\Norm\Exception\EntityAlreadyExists;
 
 /**
- * Writes changes of one entity type to the storage. Called by {@see UnitOfWork::flush()}.
+ * Writes changes of one entity type to the storage. Called by {@see UnitOfWork::flush()}: inserts of all
+ * entity sets are written first, then updates, then deletes. Use {@see DependsOn} to order entity sets.
  *
  * @api
  *

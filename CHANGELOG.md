@@ -16,6 +16,7 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 - Add `UnitOfWork::entities()` returning an `EntitySet` with `add()`, `remove()`, `manageOne()` and `manageAll()`. Repositories of one unit of work share the entity set of the same entity class.
 - Add `Exception\EntityAlreadyExists` to be thrown by `Writer::insert()` when the storage rejects a duplicate.
 - Add `UnitOfWork::$isClosed`.
+- Add `DependsOn` interface: implement it in a table whose rows reference other entities, so that `UnitOfWork::flush()` inserts and updates them after the referenced ones and deletes them before. A dependency cycle throws `Exception\DependencyCycle`.
 - Accessing `UnitOfWork::$transaction` after `flush()` or `close()` throws `UnitOfWorkClosed`, so finders do not query on behalf of a closed unit of work.
 - Unchanged entities are no longer passed to `update()`: changes are detected by comparing the result of `entityToRow()` with its result right after loading, so storage-specific representations (date formats, scalar types, extra columns) do not cause spurious updates.
 
@@ -25,6 +26,7 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 - **BC Break:** `Repository` is removed. Write your own repository class on top of `UnitOfWork::entities()` and add the finders you need, registering loaded rows via `EntitySet::manageOne()`/`manageAll()`.
 - **BC Break:** `UnitOfWork::repository()`, `Repository::findBy()` and `Repository::key()` are removed.
 - **BC Break:** Inserts, updates and deletes are passed to the `Writer` in batches.
+- **BC Break:** `UnitOfWork::flush()` writes in phases: all inserts, then all updates, then all deletes (in the reverse order), instead of flushing entity sets one by one. Hierarchies with foreign keys can now be inserted and deleted in one unit of work.
 
 ### Removed
 

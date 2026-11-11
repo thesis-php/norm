@@ -34,7 +34,7 @@ final readonly class ArticleRepository
      */
     public function find(string $id): ?Article
     {
-        return $this->articles->manageOne($this->unitOfWork->transaction->rows[$id] ?? null);
+        return $this->articles->manageOne($this->unitOfWork->transaction->articles[$id] ?? null);
     }
 
     /**
@@ -44,7 +44,7 @@ final readonly class ArticleRepository
      */
     public function findAll(): array
     {
-        return $this->articles->manageAll($this->unitOfWork->transaction->rows);
+        return $this->articles->manageAll($this->unitOfWork->transaction->articles);
     }
 
     /**

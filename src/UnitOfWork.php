@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Thesis\Norm;
 
+use Thesis\Norm\Exception\DependencyCycle;
 use Thesis\Norm\Exception\UnitOfWorkClosed;
+use Thesis\Norm\Internal\Table;
+use Thesis\Norm\Internal\Tables;
 
 /**
  * A single business transaction. Entities are tracked in {@see EntitySet}s obtained via entities(),
@@ -22,6 +25,7 @@ final class UnitOfWork
     public function __construct(object $transaction)
     {
         $this->transaction = $transaction;
+        $this->tables = new Tables();
     }
 
     /**
@@ -39,18 +43,16 @@ final class UnitOfWork
     }
 
     /**
-     * @var array<class-string, EntitySet<object>>
+     * @var Tables<Tx>
      */
-    private array $entitySets = [];
-
-    /**
-     * @var array<class-string, \Closure(): void>
-     */
-    private array $flushers = [];
+    private readonly Tables $tables;
 
     /**
      * Returns the entity set for the given entity class, creating it on the first call.
      * Subsequent calls with the same class return the same set: the table of the first call is used.
+     *
+     * If the table implements {@see DependsOn}, its rows are inserted and updated after the rows
+     * of the entity classes it depends on and deleted before them.
      *
      * @template TEntity of object
      * @template TRow of array<mixed>
@@ -63,24 +65,34 @@ final class UnitOfWork
     {
         $this->ensureNotClosed();
 
-        if (isset($this->entitySets[$class])) {
+        $registered = $this->tables->get($class);
+
+        if ($registered !== null) {
             /** @var EntitySet<TEntity> */
-            return $this->entitySets[$class];
+            return $registered->entities;
         }
 
         // Rows coming from the storage are untyped: they are trusted to match the table's row type.
         /** @var Mapper<TEntity, array<mixed>>&Writer<Tx, array<mixed>> $table */
         $entitySet = new EntitySet($table); // @phpstan-ignore varTag.type
-        $this->entitySets[$class] = $entitySet;
-        $this->flushers[$class] = fn() => $entitySet->flush($table, $this->transaction);
+        $this->tables->add(new Table(
+            class: $class,
+            entities: $entitySet,
+            writer: $table,
+            dependencies: $table instanceof DependsOn ? $table->dependsOn() : [],
+        ));
 
         return $entitySet;
     }
 
     /**
-     * Writes the changes of every entity set in the order the sets were created.
+     * Writes the changes of every entity set in three phases: all inserts, then all updates, then all deletes.
+     * Inserts and updates go in the dependency order of the entity sets (see {@see DependsOn}),
+     * deletes in the reverse one. Independent entity sets keep the order they were created in.
+     *
      * The unit of work is closed afterwards, whether the flush succeeded or not.
      *
+     * @throws DependencyCycle if the entity sets depend on each other in a cycle
      * @throws UnitOfWorkClosed
      */
     public function flush(): void
@@ -88,8 +100,29 @@ final class UnitOfWork
         $this->ensureNotClosed();
 
         try {
-            foreach ($this->flushers as $flusher) {
-                $flusher();
+            $transaction = $this->transaction;
+            // Changes of all entity sets are collected before anything is written.
+            $changes = array_map(
+                static fn(Table $table): array => [$table->writer, $table->entities->changes()],
+                $this->tables->inDependencyOrder(),
+            );
+
+            foreach ($changes as [$writer, $changeSet]) {
+                if ($changeSet->inserts !== []) {
+                    $writer->insert($transaction, $changeSet->inserts);
+                }
+            }
+
+            foreach ($changes as [$writer, $changeSet]) {
+                if ($changeSet->updates !== []) {
+                    $writer->update($transaction, $changeSet->updates);
+                }
+            }
+
+            foreach (array_reverse($changes) as [$writer, $changeSet]) {
+                if ($changeSet->deletes !== []) {
+                    $writer->delete($transaction, $changeSet->deletes);
+                }
             }
         } finally {
             $this->close();
@@ -103,12 +136,7 @@ final class UnitOfWork
      */
     public function close(): void
     {
-        foreach ($this->entitySets as $entitySet) {
-            $entitySet->close();
-        }
-
-        $this->entitySets = [];
-        $this->flushers = [];
+        $this->tables->close();
         $this->isClosed = true;
     }
 

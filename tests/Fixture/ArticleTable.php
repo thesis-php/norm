@@ -47,40 +47,42 @@ final readonly class ArticleTable implements Mapper, Writer
 
     public function insert(object $transaction, array $rows): void
     {
-        $transaction->log[] = ['insert', $rows];
+        $transaction->log[] = ['insert', 'articles', $rows];
 
         foreach ($rows as $row) {
-            if (isset($transaction->rows[$row['id']])) {
+            if (isset($transaction->articles[$row['id']])) {
                 throw new EntityAlreadyExists();
             }
 
-            $transaction->rows[$row['id']] = $row;
+            $transaction->articles[$row['id']] = $row;
         }
     }
 
     public function update(object $transaction, array $rows): void
     {
-        $transaction->log[] = ['update', $rows];
+        $transaction->log[] = ['update', 'articles', $rows];
 
         foreach ($rows as $row) {
-            if (!isset($transaction->rows[$row['id']])) {
+            if (!isset($transaction->articles[$row['id']])) {
                 throw new ConcurrentModification();
             }
 
-            $transaction->rows[$row['id']] = $row;
+            $transaction->articles[$row['id']] = $row;
         }
     }
 
     public function delete(object $transaction, array $rows): void
     {
-        $transaction->log[] = ['delete', $rows];
+        $transaction->log[] = ['delete', 'articles', $rows];
 
         foreach ($rows as $row) {
-            if (!isset($transaction->rows[$row['id']])) {
+            if (!isset($transaction->articles[$row['id']])) {
                 throw new ConcurrentModification();
             }
 
-            unset($transaction->rows[$row['id']]);
+            $transaction->ensureArticleHasNoComments($row['id']);
+
+            unset($transaction->articles[$row['id']]);
         }
     }
 }
