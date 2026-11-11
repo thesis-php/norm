@@ -23,6 +23,7 @@
     "require-dev": {
         "amphp/amp": "^3.1",
         "amphp/postgres": "^2.2",
+        "amphp/sql": "^2.1",
         "infection/infection": "^0.35.10",
         "llm/skills": "^1.16",
         "ramsey/uuid": "^4.9",
