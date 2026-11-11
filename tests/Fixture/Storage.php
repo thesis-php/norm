@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Thesis\Norm\Fixture;
 
 /**
- * @phpstan-import-type Row from ArticleRepository
+ * @phpstan-import-type Row from ArticleTable
  */
 final class Storage
 {

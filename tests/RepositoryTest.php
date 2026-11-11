@@ -41,6 +41,16 @@ final readonly class RepositoryTest
         Assert::same($repository->find('a'), $repository->find('a'));
     }
 
+    public function repositoriesOfOneUnitOfWorkShareEntities(): void
+    {
+        $unitOfWork = new UnitOfWork(self::storageWithArticle());
+
+        Assert::same(
+            new ArticleRepository($unitOfWork)->find('a'),
+            new ArticleRepository($unitOfWork)->find('a'),
+        );
+    }
+
     public function findReturnsNullForMissingRow(): void
     {
         $repository = new ArticleRepository(new UnitOfWork(new Storage()));

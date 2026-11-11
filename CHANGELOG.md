@@ -12,27 +12,27 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 ### Added
 
 - Add `Thesis\Norm\Exception` marker interface implemented by every exception of the package.
-- Add `Exception\EntityAlreadyExists` to be thrown by `Repository::insert()` when the storage rejects a duplicate.
-- Add `UnitOfWork::onFlush()` and `UnitOfWork::$isClosed`.
-- Add `Repository::manageOne()` and `Repository::manageAll()` to register loaded rows in the unit of work.
+- Add `Mapper` and `Writer` interfaces: implement them (usually in one class) to convert entities to rows and to write rows to the storage.
+- Add `UnitOfWork::entities()` returning an `EntitySet` with `add()`, `remove()`, `manageOne()` and `manageAll()`. Repositories of one unit of work share the entity set of the same entity class.
+- Add `Exception\EntityAlreadyExists` to be thrown by `Writer::insert()` when the storage rejects a duplicate.
+- Add `UnitOfWork::$isClosed`.
 - Unchanged entities are no longer passed to `update()`: changes are detected by comparing the result of `entityToRow()` with its result right after loading, so storage-specific representations (date formats, scalar types, extra columns) do not cause spurious updates.
 
 ### Changed
 
 - **BC Break:** The package is renamed from `thesis/orm` to `thesis/norm`, the namespace from `Thesis\ORM` to `Thesis\Norm`.
-- **BC Break:** `Repository` is now an abstract class to extend. Implement `entityId()`, `entityToRow()`, `rowId()`, `rowToEntity()`, `insert()`, `update()` and `delete()`; write finder methods yourself using `$this->transaction`.
-- **BC Break:** `Repository` is constructed with a `UnitOfWork` and attaches itself to it, `UnitOfWork::repository()` is removed.
-- **BC Break:** `Repository::findBy()` and `Repository::key()` are removed: add your own finders that call `manageOne()`/`manageAll()`.
-- **BC Break:** Inserts, updates and deletes are passed to the repository in batches.
+- **BC Break:** `Repository` is removed. Write your own repository class on top of `UnitOfWork::entities()` and add the finders you need, registering loaded rows via `EntitySet::manageOne()`/`manageAll()`.
+- **BC Break:** `UnitOfWork::repository()`, `Repository::findBy()` and `Repository::key()` are removed.
+- **BC Break:** Inserts, updates and deletes are passed to the `Writer` in batches.
 
 ### Removed
 
 - **BC Break:** Remove `EntityManager`. Begin and commit transactions yourself.
-- **BC Break:** Remove `Persister` and `Persister\InMemory`. Implement storage access in your `Repository` subclass instead.
+- **BC Break:** Remove `Persister` and `Persister\InMemory`. Implement `Writer` instead.
 
 ### Fixed
 
-- Repositories now throw `UnitOfWorkClosed` after `UnitOfWork::close()` or a failed `UnitOfWork::flush()`.
+- Entity sets now throw `UnitOfWorkClosed` after `UnitOfWork::close()` or a failed `UnitOfWork::flush()`.
 
 ## [0.2.0] 2026-02-22
 

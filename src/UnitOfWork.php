@@ -7,7 +7,7 @@ namespace Thesis\Norm;
 use Thesis\Norm\Exception\UnitOfWorkClosed;
 
 /**
- * A single business transaction. Repositories attach themselves to it on construction,
+ * A single business transaction. Entities are tracked in {@see EntitySet}s obtained via entities(),
  * and flush() writes their changes out once. A unit of work cannot be reused afterwards.
  *
  * @api
@@ -24,26 +24,46 @@ final class UnitOfWork
     ) {}
 
     /**
-     * @var list<callable(): void>
+     * @var array<class-string, EntitySet<object>>
      */
-    private array $flushListeners = [];
+    private array $entitySets = [];
 
     /**
-     * The listener is called at most once: flush() closes the unit of work,
-     * and close() discards the listeners without calling them.
+     * @var array<class-string, \Closure(): void>
+     */
+    private array $flushers = [];
+
+    /**
+     * Returns the entity set for the given entity class, creating it on the first call.
+     * Subsequent calls with the same class return the same set: the table of the first call is used.
      *
-     * @param callable(): void $listener
+     * @template TEntity of object
+     * @template TRow of array<mixed>
+     * @param class-string<TEntity> $class
+     * @param Mapper<TEntity, TRow>&Writer<Tx, TRow> $table
+     * @return EntitySet<TEntity>
      * @throws UnitOfWorkClosed
      */
-    public function onFlush(callable $listener): void
+    public function entities(string $class, Mapper&Writer $table): EntitySet
     {
         $this->ensureNotClosed();
 
-        $this->flushListeners[] = $listener;
+        if (isset($this->entitySets[$class])) {
+            /** @var EntitySet<TEntity> */
+            return $this->entitySets[$class];
+        }
+
+        // Rows coming from the storage are untyped: they are trusted to match the table's row type.
+        /** @var Mapper<TEntity, array<mixed>>&Writer<Tx, array<mixed>> $table */
+        $entitySet = new EntitySet($table); // @phpstan-ignore varTag.type
+        $this->entitySets[$class] = $entitySet;
+        $this->flushers[$class] = fn() => $entitySet->flush($table, $this->transaction);
+
+        return $entitySet;
     }
 
     /**
-     * Writes the changes of every attached repository in the order the repositories were constructed.
+     * Writes the changes of every entity set in the order the sets were created.
      * The unit of work is closed afterwards, whether the flush succeeded or not.
      *
      * @throws UnitOfWorkClosed
@@ -53,8 +73,8 @@ final class UnitOfWork
         $this->ensureNotClosed();
 
         try {
-            foreach ($this->flushListeners as $flushListener) {
-                $flushListener();
+            foreach ($this->flushers as $flusher) {
+                $flusher();
             }
         } finally {
             $this->close();
@@ -68,7 +88,12 @@ final class UnitOfWork
      */
     public function close(): void
     {
-        $this->flushListeners = [];
+        foreach ($this->entitySets as $entitySet) {
+            $entitySet->close();
+        }
+
+        $this->entitySets = [];
+        $this->flushers = [];
         $this->isClosed = true;
     }
 

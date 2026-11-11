@@ -4,97 +4,64 @@ declare(strict_types=1);
 
 namespace Thesis\Norm\Fixture;
 
-use Thesis\Norm\Exception\ConcurrentModification;
-use Thesis\Norm\Exception\EntityAlreadyExists;
-use Thesis\Norm\Repository;
+use Thesis\Norm\EntitySet;
+use Thesis\Norm\Exception\DuplicateEntity;
+use Thesis\Norm\Exception\EntityNotManaged;
+use Thesis\Norm\Exception\UnitOfWorkClosed;
+use Thesis\Norm\UnitOfWork;
 
-/**
- * @phpstan-type Row = array{id: non-empty-string, title: string, published_at: ?string}
- *
- * @extends Repository<Storage, Article, Row>
- */
-final class ArticleRepository extends Repository
+final readonly class ArticleRepository
 {
     /**
+     * @var EntitySet<Article>
+     */
+    private EntitySet $articles;
+
+    /**
+     * @param UnitOfWork<Storage> $unitOfWork
+     * @throws UnitOfWorkClosed
+     */
+    public function __construct(
+        private UnitOfWork $unitOfWork,
+    ) {
+        $this->articles = $unitOfWork->entities(Article::class, new ArticleTable());
+    }
+
+    /**
      * @param non-empty-string $id
+     * @throws DuplicateEntity
+     * @throws UnitOfWorkClosed
      */
     public function find(string $id): ?Article
     {
-        return $this->manageOne($this->transaction->rows[$id] ?? null);
+        return $this->articles->manageOne($this->unitOfWork->transaction->rows[$id] ?? null);
     }
 
     /**
      * @return list<Article>
+     * @throws DuplicateEntity
+     * @throws UnitOfWorkClosed
      */
     public function findAll(): array
     {
-        return $this->manageAll($this->transaction->rows);
+        return $this->articles->manageAll($this->unitOfWork->transaction->rows);
     }
 
-    protected function entityId(object $entity): string
+    /**
+     * @throws DuplicateEntity
+     * @throws UnitOfWorkClosed
+     */
+    public function add(Article $article): void
     {
-        return $entity->id;
+        $this->articles->add($article);
     }
 
-    protected function entityToRow(object $entity): array
+    /**
+     * @throws EntityNotManaged
+     * @throws UnitOfWorkClosed
+     */
+    public function remove(Article $article): void
     {
-        return [
-            'title' => $entity->title,
-            'id' => $entity->id,
-            'published_at' => $entity->publishedAt?->format('Y-m-d H:i:sP'),
-        ];
-    }
-
-    protected function rowId(array $row): string
-    {
-        return $row['id'];
-    }
-
-    protected function rowToEntity(array $row): object
-    {
-        return new Article(
-            id: $row['id'],
-            title: $row['title'],
-            publishedAt: $row['published_at'] === null ? null : new \DateTimeImmutable($row['published_at']),
-        );
-    }
-
-    protected function insert(array $rows): void
-    {
-        $this->transaction->log[] = ['insert', $rows];
-
-        foreach ($rows as $row) {
-            if (isset($this->transaction->rows[$row['id']])) {
-                throw new EntityAlreadyExists();
-            }
-
-            $this->transaction->rows[$row['id']] = $row;
-        }
-    }
-
-    protected function update(array $rows): void
-    {
-        $this->transaction->log[] = ['update', $rows];
-
-        foreach ($rows as $row) {
-            if (!isset($this->transaction->rows[$row['id']])) {
-                throw new ConcurrentModification();
-            }
-
-            $this->transaction->rows[$row['id']] = $row;
-        }
-    }
-
-    protected function delete(array $rows): void
-    {
-        $this->transaction->log[] = ['delete', $rows];
-
-        foreach ($rows as $row) {
-            if (!isset($this->transaction->rows[$row['id']])) {
-                throw new ConcurrentModification();
-            }
-
-            unset($this->transaction->rows[$row['id']]);
-        }
+        $this->articles->remove($article);
     }
 }
