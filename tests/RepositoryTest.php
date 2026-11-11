@@ -369,21 +369,21 @@ final readonly class RepositoryTest
     }
 
     #[ExpectException(UnitOfWorkClosed::class)]
-    public function transactionCannotBeAccessedAfterFlush(): void
+    public function executorCannotBeAccessedAfterFlush(): void
     {
         $unitOfWork = new UnitOfWork(new Storage());
         $unitOfWork->flush();
 
-        $_ = $unitOfWork->transaction;
+        $_ = $unitOfWork->executor;
     }
 
     #[ExpectException(UnitOfWorkClosed::class)]
-    public function transactionCannotBeAccessedAfterClose(): void
+    public function executorCannotBeAccessedAfterClose(): void
     {
         $unitOfWork = new UnitOfWork(new Storage());
         $unitOfWork->close();
 
-        $_ = $unitOfWork->transaction;
+        $_ = $unitOfWork->executor;
     }
 
     public function unitOfWorkIsClosedAfterFailedFlush(): void

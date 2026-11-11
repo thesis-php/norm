@@ -41,23 +41,23 @@ final readonly class CommentTable implements Mapper, Writer
         );
     }
 
-    public function insert(object $transaction, array $rows): void
+    public function insert(object $executor, array $rows): void
     {
-        $transaction->log[] = ['insert', 'comments', $rows];
+        $executor->log[] = ['insert', 'comments', $rows];
 
         foreach ($rows as $row) {
-            if (isset($transaction->comments[$row['id']])) {
+            if (isset($executor->comments[$row['id']])) {
                 throw new EntityAlreadyExists();
             }
 
-            $transaction->ensureArticleExists($row['article_id']);
-            $transaction->comments[$row['id']] = $row;
+            $executor->ensureArticleExists($row['article_id']);
+            $executor->comments[$row['id']] = $row;
         }
     }
 
-    public function update(object $transaction, array $changes): void
+    public function update(object $executor, array $changes): void
     {
-        $transaction->log[] = ['update', 'comments', array_map(
+        $executor->log[] = ['update', 'comments', array_map(
             static fn(Change $change): array => ['before' => $change->before, 'after' => $change->after],
             $changes,
         )];
@@ -65,25 +65,25 @@ final readonly class CommentTable implements Mapper, Writer
         foreach ($changes as $change) {
             $row = $change->after;
 
-            if (!isset($transaction->comments[$row['id']])) {
+            if (!isset($executor->comments[$row['id']])) {
                 throw new ConcurrentModification();
             }
 
-            $transaction->ensureArticleExists($row['article_id']);
-            $transaction->comments[$row['id']] = $row;
+            $executor->ensureArticleExists($row['article_id']);
+            $executor->comments[$row['id']] = $row;
         }
     }
 
-    public function delete(object $transaction, array $rows): void
+    public function delete(object $executor, array $rows): void
     {
-        $transaction->log[] = ['delete', 'comments', $rows];
+        $executor->log[] = ['delete', 'comments', $rows];
 
         foreach ($rows as $row) {
-            if (!isset($transaction->comments[$row['id']])) {
+            if (!isset($executor->comments[$row['id']])) {
                 throw new ConcurrentModification();
             }
 
-            unset($transaction->comments[$row['id']]);
+            unset($executor->comments[$row['id']]);
         }
     }
 }

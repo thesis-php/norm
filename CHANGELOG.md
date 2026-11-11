@@ -21,7 +21,7 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 - Add `EntitySet::find()` for finders by id: it returns an entity passed to `add()` or already loaded without querying the storage and `null` for a removed entity, otherwise it loads and registers the row. Finders by other criteria keep reflecting the storage.
 - Add `BeforeFlush` interface: implement it in a table to act on every managed entity right before `UnitOfWork::flush()` collects changes (release events into an outbox, cascade removals, touch `updatedAt`). The hook receives the entity and its `EntityState` (`New`, `Unchanged`, `Changed`, `Removed`) and may change, add, remove and load entities of any entity set. Entities cannot be changed while the changes are being written.
 - Add named constructors to `DuplicateEntity`, `EntityNotManaged`, `UnitOfWorkClosed` and `DependencyCycle`: their messages name the entity class and id, and `DependencyCycle` names the classes of the cycle.
-- Accessing `UnitOfWork::$transaction` after `flush()` or `close()` throws `UnitOfWorkClosed`, so finders do not query on behalf of a closed unit of work.
+- Accessing `UnitOfWork::$executor` after `flush()` or `close()` throws `UnitOfWorkClosed`, so finders do not query on behalf of a closed unit of work.
 - Unchanged entities are no longer passed to `update()`: changes are detected by comparing the result of `entityToRow()` with its result right after loading, so storage-specific representations (date formats, scalar types, extra columns) do not cause spurious updates.
 
 ### Changed
@@ -30,6 +30,7 @@ The library is rethought as NORM (Not An ORM): a minimal unit of work on top of 
 - **BC Break:** `Repository` is removed. Write your own repository class on top of `UnitOfWork::entities()` and add the finders you need, registering loaded rows via `EntitySet::manageOne()`/`manageAll()`.
 - **BC Break:** `UnitOfWork::repository()`, `Repository::findBy()` and `Repository::key()` are removed.
 - **BC Break:** Inserts, updates and deletes are passed to the `Writer` in batches.
+- **BC Break:** `UnitOfWork::$transaction` is renamed to `$executor` and the `Tx` template to `TExecutor`: a unit of work may run on a transaction, a connection or a pool.
 - **BC Break:** `Writer::update()` receives a list of `Change` objects with the row as loaded (`before`) and as it is now (`after`), so that optimistic locks can check the loaded version and only the changed columns can be written.
 - **BC Break:** `UnitOfWork::flush()` writes in phases: all inserts, then all updates, then all deletes (in the reverse order), instead of flushing entity sets one by one. Hierarchies with foreign keys can now be inserted and deleted in one unit of work.
 

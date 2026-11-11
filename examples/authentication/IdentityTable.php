@@ -43,9 +43,9 @@ final readonly class IdentityTable implements Mapper, Writer
         );
     }
 
-    public function insert(object $transaction, array $rows): void
+    public function insert(object $executor, array $rows): void
     {
-        $statement = $transaction->prepare(
+        $statement = $executor->prepare(
             <<<'SQL'
                 insert into identity (id, password_hash, version)
                 values (:id, :password_hash, :version)
@@ -65,9 +65,9 @@ final readonly class IdentityTable implements Mapper, Writer
         }
     }
 
-    public function update(object $transaction, array $changes): void
+    public function update(object $executor, array $changes): void
     {
-        $statement = $transaction->prepare(
+        $statement = $executor->prepare(
             <<<'SQL'
                 update identity
                 set password_hash = :password_hash,
@@ -89,9 +89,9 @@ final readonly class IdentityTable implements Mapper, Writer
         }
     }
 
-    public function delete(object $transaction, array $rows): void
+    public function delete(object $executor, array $rows): void
     {
-        $statement = $transaction->prepare(
+        $statement = $executor->prepare(
             <<<'SQL'
                 delete from identity
                 where id = ? and version = ?

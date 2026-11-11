@@ -57,18 +57,18 @@ final readonly class DependentTable implements Mapper, Writer, DependsOn, Before
         return $this->table->rowToEntity($row);
     }
 
-    public function insert(object $transaction, array $rows): void
+    public function insert(object $executor, array $rows): void
     {
-        $this->table->insert($transaction, $rows);
+        $this->table->insert($executor, $rows);
     }
 
-    public function update(object $transaction, array $changes): void
+    public function update(object $executor, array $changes): void
     {
-        $this->table->update($transaction, $changes);
+        $this->table->update($executor, $changes);
     }
 
-    public function delete(object $transaction, array $rows): void
+    public function delete(object $executor, array $rows): void
     {
-        $this->table->delete($transaction, $rows);
+        $this->table->delete($executor, $rows);
     }
 }

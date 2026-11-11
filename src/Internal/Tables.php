@@ -11,18 +11,18 @@ use Thesis\Norm\Exception\DependencyCycle;
  *
  * @internal
  *
- * @template Tx of object
+ * @template TExecutor of object
  */
 final class Tables
 {
     /**
-     * @var array<class-string, Table<Tx>>
+     * @var array<class-string, Table<TExecutor>>
      */
     private array $tables = [];
 
     /**
      * @param class-string $class
-     * @return ?Table<Tx>
+     * @return ?Table<TExecutor>
      */
     public function get(string $class): ?Table
     {
@@ -30,7 +30,7 @@ final class Tables
     }
 
     /**
-     * @param Table<Tx> $table
+     * @param Table<TExecutor> $table
      */
     public function add(Table $table): void
     {
@@ -41,7 +41,7 @@ final class Tables
      * Every table goes after the tables it depends on, otherwise in the order of registration.
      * Dependencies on itself and on entity classes that are not registered are ignored.
      *
-     * @return list<Table<Tx>>
+     * @return list<Table<TExecutor>>
      * @throws DependencyCycle
      */
     public function inDependencyOrder(): array
@@ -68,7 +68,7 @@ final class Tables
     /**
      * Every pending table has a pending dependency other than itself, so following them leads to a cycle.
      *
-     * @param non-empty-array<class-string, Table<Tx>> $pending
+     * @param non-empty-array<class-string, Table<TExecutor>> $pending
      * @return non-empty-list<class-string> the cycle with its first class repeated at the end
      */
     private static function findCycle(array $pending): array

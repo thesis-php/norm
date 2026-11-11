@@ -13,29 +13,29 @@ use Thesis\Norm\Exception\EntityAlreadyExists;
  *
  * @api
  *
- * @template-contravariant Tx of object
+ * @template-contravariant TExecutor of object the executor of the unit of work, see {@see UnitOfWork::$executor}
  * @template-contravariant TRow of array<mixed>
  */
 interface Writer
 {
     /**
-     * @param Tx $transaction
+     * @param TExecutor $executor
      * @param non-empty-list<TRow> $rows
      * @throws EntityAlreadyExists if the storage rejects an entity as already existing
      */
-    public function insert(object $transaction, array $rows): void;
+    public function insert(object $executor, array $rows): void;
 
     /**
-     * @param Tx $transaction
+     * @param TExecutor $executor
      * @param non-empty-list<Change<TRow>> $changes only the rows that differ from their snapshots
      * @throws ConcurrentModification
      */
-    public function update(object $transaction, array $changes): void;
+    public function update(object $executor, array $changes): void;
 
     /**
-     * @param Tx $transaction
+     * @param TExecutor $executor
      * @param non-empty-list<TRow> $rows {@see Mapper::entityToRow()} snapshots taken when the entities were loaded
      * @throws ConcurrentModification
      */
-    public function delete(object $transaction, array $rows): void;
+    public function delete(object $executor, array $rows): void;
 }

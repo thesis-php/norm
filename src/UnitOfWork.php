@@ -18,35 +18,35 @@ use Thesis\Norm\Internal\Tables;
  *
  * @api
  *
- * @template-covariant Tx of object
+ * @template-covariant TExecutor of object whatever runs the queries: a transaction, a connection or a pool
  */
 final class UnitOfWork
 {
     /**
-     * @param Tx $transaction
+     * @param TExecutor $executor
      */
-    public function __construct(object $transaction)
+    public function __construct(object $executor)
     {
-        $this->transaction = $transaction;
+        $this->executor = $executor;
         $this->tables = new Tables();
     }
 
     /**
      * Not accessible once the unit of work is closed, so that finders do not query on behalf of a closed unit of work.
      *
-     * @var Tx
+     * @var TExecutor
      * @throws UnitOfWorkClosed
      */
-    public private(set) object $transaction {
+    public private(set) object $executor {
         get {
             $this->ensureNotClosed();
 
-            return $this->transaction;
+            return $this->executor;
         }
     }
 
     /**
-     * @var Tables<Tx>
+     * @var Tables<TExecutor>
      */
     private readonly Tables $tables;
 
@@ -61,7 +61,7 @@ final class UnitOfWork
      * @template TEntity of object
      * @template TRow of array<mixed>
      * @param class-string<TEntity> $class
-     * @param Mapper<TEntity, TRow>&Writer<Tx, TRow> $table
+     * @param Mapper<TEntity, TRow>&Writer<TExecutor, TRow> $table
      * @return EntitySet<TEntity>
      * @throws UnitOfWorkClosed
      */
@@ -77,7 +77,7 @@ final class UnitOfWork
         }
 
         // Rows coming from the storage are untyped: they are trusted to match the table's row type.
-        /** @var Mapper<TEntity, array<mixed>>&Writer<Tx, array<mixed>> $table */
+        /** @var Mapper<TEntity, array<mixed>>&Writer<TExecutor, array<mixed>> $table */
         $entitySet = new EntitySet($class, $table); // @phpstan-ignore varTag.type
         $this->tables->add(new Table(
             class: $class,
@@ -107,7 +107,7 @@ final class UnitOfWork
         $this->ensureNotClosed();
 
         try {
-            $transaction = $this->transaction;
+            $executor = $this->executor;
             $this->callBeforeFlushHooks();
             // Changes of all entity sets are collected before anything is written.
             $changes = array_map(
@@ -118,19 +118,19 @@ final class UnitOfWork
 
             foreach ($changes as [$writer, $changeSet]) {
                 if ($changeSet->inserts !== []) {
-                    $writer->insert($transaction, $changeSet->inserts);
+                    $writer->insert($executor, $changeSet->inserts);
                 }
             }
 
             foreach ($changes as [$writer, $changeSet]) {
                 if ($changeSet->updates !== []) {
-                    $writer->update($transaction, $changeSet->updates);
+                    $writer->update($executor, $changeSet->updates);
                 }
             }
 
             foreach (array_reverse($changes) as [$writer, $changeSet]) {
                 if ($changeSet->deletes !== []) {
-                    $writer->delete($transaction, $changeSet->deletes);
+                    $writer->delete($executor, $changeSet->deletes);
                 }
             }
         } finally {

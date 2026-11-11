@@ -125,7 +125,7 @@ final readonly class BeforeFlushTest
                     return;
                 }
 
-                foreach ($unitOfWork->transaction->comments as $row) {
+                foreach ($unitOfWork->executor->comments as $row) {
                     if ($row['article_id'] === $article->id) {
                         $comments->remove($comments->manageOne($row));
                     }

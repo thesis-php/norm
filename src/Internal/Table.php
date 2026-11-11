@@ -13,14 +13,14 @@ use Thesis\Norm\Writer;
  *
  * @internal
  *
- * @template Tx of object
+ * @template TExecutor of object
  */
 final readonly class Table
 {
     /**
      * @param class-string $class
      * @param EntitySet<object> $entities
-     * @param Writer<Tx, array<mixed>> $writer
+     * @param Writer<TExecutor, array<mixed>> $writer
      * @param list<class-string> $dependencies entity classes this table's rows reference
      * @param ?BeforeFlush<object> $beforeFlush
      */

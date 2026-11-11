@@ -31,7 +31,7 @@ final readonly class IdentityRepository
             $id->toString(),
             fn(): ?array => $this
                 ->unitOfWork
-                ->transaction
+                ->executor
                 ->execute(
                     <<<'SQL'
                         select id, password_hash, version
@@ -50,7 +50,7 @@ final readonly class IdentityRepository
     public function findAll(): array
     {
         return $this->identities->manageAll(
-            $this->unitOfWork->transaction->query(
+            $this->unitOfWork->executor->query(
                 <<<'SQL'
                     select id, password_hash, version
                     from identity
