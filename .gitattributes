@@ -13,3 +13,5 @@
 /composer.json -export-ignore
 /LICENSE -export-ignore
 /README.md -export-ignore
+/skills/ -export-ignore
+/skills/** -export-ignore
