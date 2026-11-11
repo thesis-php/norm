@@ -19,9 +19,24 @@ final class UnitOfWork
     /**
      * @param Tx $transaction
      */
-    public function __construct(
-        public readonly object $transaction,
-    ) {}
+    public function __construct(object $transaction)
+    {
+        $this->transaction = $transaction;
+    }
+
+    /**
+     * Not accessible once the unit of work is closed, so that finders do not query on behalf of a closed unit of work.
+     *
+     * @var Tx
+     * @throws UnitOfWorkClosed
+     */
+    public private(set) object $transaction {
+        get {
+            $this->ensureNotClosed();
+
+            return $this->transaction;
+        }
+    }
 
     /**
      * @var array<class-string, EntitySet<object>>

@@ -205,6 +205,24 @@ final readonly class RepositoryTest
         new ArticleRepository($unitOfWork);
     }
 
+    #[ExpectException(UnitOfWorkClosed::class)]
+    public function transactionCannotBeAccessedAfterFlush(): void
+    {
+        $unitOfWork = new UnitOfWork(new Storage());
+        $unitOfWork->flush();
+
+        $_ = $unitOfWork->transaction;
+    }
+
+    #[ExpectException(UnitOfWorkClosed::class)]
+    public function transactionCannotBeAccessedAfterClose(): void
+    {
+        $unitOfWork = new UnitOfWork(new Storage());
+        $unitOfWork->close();
+
+        $_ = $unitOfWork->transaction;
+    }
+
     public function unitOfWorkIsClosedAfterFailedFlush(): void
     {
         $unitOfWork = new UnitOfWork(self::storageWithArticle());
