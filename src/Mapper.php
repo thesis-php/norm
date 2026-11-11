@@ -11,10 +11,14 @@ namespace Thesis\Norm;
  * entityToRow() results, so a lossy conversion either hides changes or produces spurious updates.
  * Implement {@see RowId} as well to avoid hydrating rows of already managed entities.
  *
+ * Rows must consist of scalars, nulls and arrays of them only. Change detection compares rows with `!==`,
+ * which compares objects by reference: an object in a row (a date, a value object) would make
+ * the entity look changed on every flush. Convert such values to scalars, e.g. dates to strings.
+ *
  * @api
  *
  * @template TEntity of object
- * @template TRow of array<mixed>
+ * @template TRow of array<mixed> row of scalars, nulls and arrays of them
  */
 interface Mapper
 {

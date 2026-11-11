@@ -13,6 +13,9 @@ use Thesis\Norm\Internal\Tables;
  * A single business transaction. Entities are tracked in {@see EntitySet}s obtained via entities(),
  * and flush() writes their changes out once. A unit of work cannot be reused afterwards.
  *
+ * A unit of work is not safe for concurrent use: create one per scope (a request, a message, a command)
+ * together with the repositories that use it and do not share it between fibers.
+ *
  * @api
  *
  * @template-covariant Tx of object
