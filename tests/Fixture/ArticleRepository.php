@@ -10,10 +10,13 @@ use Thesis\Norm\Exception\EntityNotManaged;
 use Thesis\Norm\Exception\UnitOfWorkClosed;
 use Thesis\Norm\UnitOfWork;
 
+/**
+ * @phpstan-import-type Row from ArticleTable as ArticleRow
+ */
 final readonly class ArticleRepository
 {
     /**
-     * @var EntitySet<Article>
+     * @var EntitySet<Article, ArticleRow>
      */
     private EntitySet $articles;
 

@@ -18,11 +18,12 @@ use Thesis\Norm\Internal\PersistedEntity;
  * @api
  *
  * @template TEntity of object
+ * @template-contravariant TRow of array<mixed> the row type of the table, see {@see Mapper}
  */
 final class EntitySet
 {
     /**
-     * @var array<non-empty-string, NewEntity<TEntity>|PersistedEntity<TEntity, array<mixed>>>
+     * @var array<non-empty-string, NewEntity<TEntity>|PersistedEntity<TEntity, TRow>>
      */
     private array $entities = [];
 
@@ -32,11 +33,13 @@ final class EntitySet
      * @internal
      *
      * @param class-string<TEntity> $class
-     * @param Mapper<TEntity, array<mixed>> $mapper
+     * @param Mapper<TEntity, TRow> $mapper
+     * @param ChangeSet<TEntity, TRow> $changeSet collects the changes on flush, see collectChanges()
      */
     public function __construct(
         private readonly string $class,
         private readonly Mapper $mapper,
+        private readonly ChangeSet $changeSet,
     ) {}
 
     /**
@@ -46,7 +49,7 @@ final class EntitySet
      * the pending changes, unlike finders by other criteria, which reflect the storage.
      *
      * @param non-empty-string $id
-     * @param \Closure(): ?array<mixed> $load loads the row with the given id from the storage
+     * @param \Closure(): ?TRow $load loads the row with the given id from the storage
      * @return ?TEntity
      * @throws DuplicateEntity
      * @throws UnitOfWorkClosed
@@ -72,9 +75,9 @@ final class EntitySet
      * Registers a row loaded from the storage and returns its entity.
      * Rows of removed entities still give their entities: finders by criteria reflect the storage.
      * If the entity is already managed, the same instance is returned and the row is ignored.
-     * The row must match the mapper's row type: it is passed to the mapper as is.
+     * Rows coming from the storage are untyped: bring them to TRow in the repository before passing them here.
      *
-     * @param ?array<mixed> $row
+     * @param ?TRow $row
      * @return ($row is null ? null : TEntity)
      * @throws DuplicateEntity if the entity has already been passed to add()
      * @throws UnitOfWorkClosed
@@ -106,15 +109,15 @@ final class EntitySet
         }
 
         $entity ??= $this->mapper->rowToEntity($row);
-        // The snapshot is taken via entityToRow() rather than from the raw row, so that storage-specific
-        // representations (date formats, scalar types, extra columns) do not make the entity look changed.
+        // The snapshot is taken via entityToRow() of the very entity rowToEntity() returned,
+        // so that the state the mapper keeps per entity (e.g. the version of an optimistic lock) gets into it.
         $this->entities[$id] = new PersistedEntity($entity, $this->mapper->entityToRow($entity));
 
         return $entity;
     }
 
     /**
-     * @param iterable<array<mixed>> $rows
+     * @param iterable<TRow> $rows
      * @return list<TEntity>
      * @throws DuplicateEntity if one of the entities has already been passed to add()
      * @throws UnitOfWorkClosed
@@ -220,17 +223,13 @@ final class EntitySet
     /**
      * @internal
      *
-     * @return ChangeSet<TEntity, array<mixed>>
+     * Puts the changes into the change set given to the constructor. Called once, on flush.
      */
-    public function changes(): ChangeSet
+    public function collectChanges(): void
     {
-        $changeSet = new ChangeSet($this->mapper->entityToRow(...));
-
         foreach ($this->entities as $entity) {
-            $entity->collectChanges($changeSet);
+            $entity->collectChanges($this->changeSet);
         }
-
-        return $changeSet;
     }
 
     /**

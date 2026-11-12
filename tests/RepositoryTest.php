@@ -103,8 +103,8 @@ final readonly class RepositoryTest
         $articles = new UnitOfWork(new Storage())->entities(Article::class, new ArticleTable());
         $article = $articles->manageOne(self::ARTICLE);
 
-        // A partial row cannot be hydrated, but rowId() is enough to find the managed entity.
-        Assert::same($articles->manageOne(['id' => 'a']), $article);
+        // The row cannot be hydrated (the date is invalid), but rowId() is enough to find the managed entity.
+        Assert::same($articles->manageOne(['id' => 'a', 'title' => 'A', 'published_at' => 'not a date']), $article);
     }
 
     public function rowIsIdentifiedByHydratedEntityWithoutRowId(): void

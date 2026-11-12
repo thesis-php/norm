@@ -120,9 +120,10 @@ public function delete(object $executor, array $rows): void
 ## 4. Repository
 
 ```php
+/** @phpstan-import-type Row from ArticleTable */
 final readonly class ArticleRepository
 {
-    /** @var EntitySet<Article> */
+    /** @var EntitySet<Article, Row> */
     private EntitySet $articles;
 
     /** @param UnitOfWork<PostgresLink> $unitOfWork */
@@ -136,9 +137,7 @@ final readonly class ArticleRepository
     {
         return $this->articles->find(
             $id->toString(),
-            fn(): ?array => $this->unitOfWork->executor
-                ->execute('select id, title, published_at, version from article where id = ?', [$id->toString()])
-                ->fetchRow(),
+            fn(): ?array => $this->selectRows('select id, title, published_at, version from article where id = ?', $id)[0] ?? null,
         );
     }
 
@@ -146,12 +145,24 @@ final readonly class ArticleRepository
     public function findDraftsOf(UuidInterface $authorId): array
     {
         return $this->articles->manageAll(
-            $this->unitOfWork->executor->execute('select ... where author_id = ? and published_at is null', [$authorId->toString()]),
+            $this->selectRows('select ... where author_id = ? and published_at is null', $authorId),
         );
+    }
+
+    /** @return list<Row> */
+    private function selectRows(string $sql, UuidInterface $id): array
+    {
+        // Rows of the driver are untyped: the selected columns are trusted to match the row type of the table.
+        /** @var list<Row> */
+        return iterator_to_array($this->unitOfWork->executor->execute($sql, [$id->toString()]), preserve_keys: false);
     }
 }
 ```
 
+- **Rows passed to the entity set are `TRow`** (`EntitySet<TEntity, TRow>`): `find()`, `manageOne()` and `manageAll()`
+  hand them to `rowToEntity()`/`rowId()` as they are. Driver rows are untyped: bring them to `Row` in one private
+  method of the repository with a `@var` (or normalize them there if the driver returns other types), never
+  with `@var` scattered over finders.
 - **One repository per entity class** is the only caller of `entities()` for it: a second call in a unit of work
   throws `EntitySetAlreadyRegistered`. Other repositories and tables needing the entities get this repository
   injected (scoped with the unit of work), they never call `entities()` for a foreign class.
@@ -198,9 +209,7 @@ not the domain. Example: `vendor/thesis/norm/examples/authentication/IdentityTab
 public function lock(UuidInterface $id): ?Article
 {
     return $this->articles->manageOne(
-        $this->unitOfWork->executor
-            ->execute('select id, title, published_at, version from article where id = ? for update', [$id->toString()])
-            ->fetchRow(),
+        $this->selectRows('select id, title, published_at, version from article where id = ? for update', $id)[0] ?? null,
     );
 }
 ```

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **BC Break:** `EntitySet` gets the row type of its table as the second template parameter, `EntitySet<TEntity, TRow>`, returned by `UnitOfWork::entities()`. `find()`, `manageOne()` and `manageAll()` accept `TRow` instead of any array, so PHPStan reports rows that do not match the table. Rows of a database driver are untyped: bring them to `TRow` in the repository, e.g. with a `@var` in one private method that runs the select. Update `@var EntitySet<Entity>` to `@var EntitySet<Entity, Row>`.
+
 ## [0.4.0] 2026-11-12
 
 The abstract `Repository` is split into composable parts: a table converts and writes rows, an entity set tracks entities, and the repository is your own class.

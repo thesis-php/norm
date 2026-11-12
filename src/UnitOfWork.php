@@ -9,6 +9,7 @@ use Thesis\Norm\Exception\DependencyCycle;
 use Thesis\Norm\Exception\EntityAlreadyExists;
 use Thesis\Norm\Exception\EntitySetAlreadyRegistered;
 use Thesis\Norm\Exception\UnitOfWorkClosed;
+use Thesis\Norm\Internal\ChangeSet;
 use Thesis\Norm\Internal\Table;
 use Thesis\Norm\Internal\Tables;
 
@@ -66,7 +67,7 @@ final class UnitOfWork
      * @template TRow of array<mixed>
      * @param class-string<TEntity> $class
      * @param Mapper<TEntity, TRow>&Writer<TExecutor, TRow> $table
-     * @return EntitySet<TEntity>
+     * @return EntitySet<TEntity, TRow>
      * @throws EntitySetAlreadyRegistered if the entity set of the class is already registered
      * @throws UnitOfWorkClosed
      */
@@ -78,12 +79,12 @@ final class UnitOfWork
             throw EntitySetAlreadyRegistered::create($class);
         }
 
-        // Rows coming from the storage are untyped: they are trusted to match the table's row type.
-        /** @var Mapper<TEntity, array<mixed>>&Writer<TExecutor, array<mixed>> $table */
-        $entitySet = new EntitySet($class, $table); // @phpstan-ignore varTag.type
+        $changeSet = new ChangeSet($table->entityToRow(...));
+        $entitySet = new EntitySet($class, $table, $changeSet);
         $this->tables->add(new Table(
             class: $class,
             entities: $entitySet,
+            changeSet: $changeSet,
             writer: $table,
             dependencies: $table instanceof DependsOn ? $table->dependsOn() : [],
             beforeFlush: $table instanceof BeforeFlush ? $table : null,
@@ -123,28 +124,24 @@ final class UnitOfWork
         try {
             $this->callBeforeFlushHooks();
             // Changes of all entity sets are collected before anything is written.
-            $changes = array_map(
-                static fn(Table $table): array => [$table->writer, $table->entities->changes()],
-                $this->tables->inDependencyOrder(),
-            );
+            $tables = $this->tables->inDependencyOrder();
+
+            foreach ($tables as $table) {
+                $table->entities->collectChanges();
+            }
+
             $this->close();
 
-            foreach ($changes as [$writer, $changeSet]) {
-                if ($changeSet->inserts !== []) {
-                    $writer->insert($executor, $changeSet->inserts);
-                }
+            foreach ($tables as $table) {
+                $table->insert($executor);
             }
 
-            foreach ($changes as [$writer, $changeSet]) {
-                if ($changeSet->updates !== []) {
-                    $writer->update($executor, $changeSet->updates);
-                }
+            foreach ($tables as $table) {
+                $table->update($executor);
             }
 
-            foreach (array_reverse($changes) as [$writer, $changeSet]) {
-                if ($changeSet->deletes !== []) {
-                    $writer->delete($executor, $changeSet->deletes);
-                }
+            foreach (array_reverse($tables) as $table) {
+                $table->delete($executor);
             }
         } finally {
             $this->close();

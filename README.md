@@ -112,9 +112,10 @@ A **repository** is your own class. It gets the [`EntitySet`](src/EntitySet.php)
 from the unit of work and exposes only what the domain needs:
 
 ```php
+/** @phpstan-import-type Row from IdentityTable */
 final readonly class IdentityRepository
 {
-    /** @var EntitySet<Identity> */
+    /** @var EntitySet<Identity, Row> */
     private EntitySet $identities;
 
     /** @param UnitOfWork<PostgresLink> $unitOfWork */
@@ -128,18 +129,7 @@ final readonly class IdentityRepository
     {
         return $this->identities->find(
             id: $id->toString(),
-            load: fn(): ?array => $this
-                ->unitOfWork
-                ->executor
-                ->execute(
-                    <<<'SQL'
-                        select id, password_hash
-                        from identity
-                        where id = ?
-                        SQL,
-                    [$id->toString()],
-                )
-                ->fetchRow(),
+            load: fn(): ?array => $this->selectRow('select id, password_hash from identity where id = ?', $id),
         );
     }
 
@@ -147,8 +137,19 @@ final readonly class IdentityRepository
     {
         $this->identities->add($identity);
     }
+
+    /** @return ?Row */
+    private function selectRow(string $sql, UuidInterface $id): ?array
+    {
+        // Rows of the driver are untyped: the selected columns are trusted to match the row type of the table.
+        /** @var ?Row */
+        return $this->unitOfWork->executor->execute($sql, [$id->toString()])->fetchRow();
+    }
 }
 ```
+
+The entity set takes rows of the table's row type only. Rows of a database driver are untyped, so the repository
+brings them to `Row`, here with one `@var` in `selectRow()`.
 
 A complete version of this entity, with the queries written out and an optimistic lock, is in
 [`examples/authentication`](examples/authentication): [`Identity`](examples/authentication/Identity.php),
@@ -206,11 +207,13 @@ A unit of work is not safe for concurrent use: create one per scope (a request, 
 and do not share it between fibers. Create its repositories in the same scope, one instance of each: a second
 instance registers the entity set again and throws `EntitySetAlreadyRegistered`.
 
-### `EntitySet<TEntity>`
+### `EntitySet<TEntity, TRow>`
+
+`TRow` is the row type of the table: rows passed to the entity set go to `rowToEntity()` and `rowId()` as they are.
 
 - `find($id, $load)` — for finders by id. Returns an entity passed to `add()` or already loaded without calling
-  `$load`, `null` for a removed one, otherwise registers the row returned by `$load`.
-- `manageOne(?array $row)` / `manageAll(iterable $rows)` — for finders by other criteria. Register rows loaded
+  `$load`, `null` for a removed one, otherwise registers the `?TRow` returned by `$load`.
+- `manageOne(?TRow $row)` / `manageAll(iterable<TRow> $rows)` — for finders by other criteria. Register rows loaded
   from the storage and return their entities; an already managed entity is returned as is, its row is ignored.
   They reflect the storage, not pending changes: a removed entity is still returned, an added one is not found.
 - `add($entity)` — the entity will be inserted. Adding a removed entity back cancels the removal.
@@ -267,9 +270,10 @@ Throw `ConcurrentModification` when an update or a delete affects no row.
       // rowToEntity(), entityToRow(), insert(), update(), delete() ...
   }
 
+  /** @phpstan-import-type Row from OrderTable */
   final readonly class OrderRepository
   {
-      /** @var EntitySet<Order> */
+      /** @var EntitySet<Order, Row> */
       private EntitySet $orders;
 
       public function __construct(UnitOfWork $unitOfWork, OutboxRepository $outbox)
@@ -287,9 +291,8 @@ Throw `ConcurrentModification` when an update or a delete affects no row.
 
 - **Identity map.** Within a unit of work, one row gives one object. Adding another object with the id
   of a managed entity throws `DuplicateEntity`.
-- **Change detection.** A snapshot is taken as `entityToRow()` of the freshly loaded entity, not as the raw row,
-  so storage-specific representations (date formats, `'1'` vs `1`, extra selected columns) do not cause spurious
-  updates. Unchanged entities are not written.
+- **Change detection.** A snapshot is taken as `entityToRow()` of the freshly loaded entity, so the state a mapper
+  keeps per entity (a version in a `WeakMap`) gets into it. Unchanged entities are not written.
 - **Flush order.** `BeforeFlush` hooks run first. Then all inserts, then all updates, then all deletes. Inserts
   and updates go in the dependency order of entity sets (`DependsOn`), deletes in the reverse one; independent
   entity sets keep the order of registration. A dependency cycle throws `DependencyCycle` before anything is
@@ -324,9 +327,10 @@ The version check catches concurrent changes, so reading does not need a transac
   it has begun: `ReflectionClass::isUninitializedLazyObject()` or a flag of its own.
 
 ```php
+/** @phpstan-import-type Row from IdentityTable */
 final readonly class IdentityRepository
 {
-    /** @var EntitySet<Identity> */
+    /** @var EntitySet<Identity, Row> */
     private EntitySet $identities;
 
     /** @param UnitOfWork<PostgresTransaction> $unitOfWork on a lazily begun transaction */
@@ -341,9 +345,12 @@ final readonly class IdentityRepository
     {
         return $this->identities->find(
             id: $id->toString(),
-            load: fn(): ?array => $this->postgres
-                ->execute('select id, password_hash, version from identity where id = ?', [$id->toString()])
-                ->fetchRow(),
+            load: function () use ($id): ?array {
+                /** @var ?Row */
+                return $this->postgres
+                    ->execute('select id, password_hash, version from identity where id = ?', [$id->toString()])
+                    ->fetchRow();
+            },
         );
     }
 }
@@ -363,11 +370,12 @@ For aggregates under contention, where waiting is cheaper than retrying (a balan
 ```php
 public function lock(UuidInterface $id): ?Identity
 {
-    return $this->identities->manageOne(
-        $this->unitOfWork->executor
-            ->execute('select id, password_hash, version from identity where id = ? for update', [$id->toString()])
-            ->fetchRow(),
-    );
+    /** @var ?Row $row */
+    $row = $this->unitOfWork->executor
+        ->execute('select id, password_hash, version from identity where id = ? for update', [$id->toString()])
+        ->fetchRow();
+
+    return $this->identities->manageOne($row);
 }
 ```
 
